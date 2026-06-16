@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sugoroku Classroom Board</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <section id="startScreen" class="start-screen card">
+      <p class="eyebrow">English Class Sugoroku</p>
+      <h1>I have been...</h1>
+      <p>Choose the number of players and start the endless board game.</p>
+      <fieldset class="player-settings">
+        <legend>Players</legend>
+        <label><input type="radio" name="playerCount" value="2" checked /> 2</label>
+        <label><input type="radio" name="playerCount" value="3" /> 3</label>
+      </fieldset>
+      <div id="nameFields" class="name-fields" aria-label="Player names"></div>
+      <button id="startButton" class="primary-button" type="button">Start Game</button>
+    </section>
+
+    <section id="gameScreen" class="game-screen hidden">
+      <header class="top-bar card">
+        <div>
+          <p class="eyebrow">Current Turn</p>
+          <h2 id="currentPlayerName">Player 1</h2>
+        </div>
+        <p id="turnInstruction" class="turn-instruction">Choose your prediction before rolling.</p>
+        <button id="endGameButton" class="danger-button" type="button">End Game</button>
+      </header>
+
+      <section class="board-area card">
+        <div id="board" class="board" aria-label="Directed sugoroku board"></div>
+        <div id="floatingMessage" class="floating-message hidden"></div>
+      </section>
+
+      <aside class="control-panel">
+        <section class="card compact-card">
+          <h3>Scores</h3>
+          <div id="scoreboard" class="scoreboard"></div>
+        </section>
+
+        <section class="card compact-card">
+          <h3>Time Phrases</h3>
+          <div id="timePhraseTable" class="time-table"></div>
+        </section>
+
+        <section class="card compact-card">
+          <h3>Prediction</h3>
+          <div id="predictionButtons" class="prediction-grid"></div>
+          <div class="dice-row">
+            <div id="dice" class="dice" aria-live="polite">?</div>
+            <button id="rollButton" class="primary-button" type="button" disabled>Roll</button>
+          </div>
+          <button id="nextTurnButton" class="secondary-button hidden" type="button">Next Turn</button>
+        </section>
+
+        <section class="card compact-card turn-summary-card">
+          <h3>Turn Result</h3>
+          <p id="turnSummary">Roll to see this turn's points.</p>
+        </section>
+      </aside>
+    </section>
+
+    <section id="resultsSplash" class="results-splash hidden" role="dialog" aria-modal="true" aria-labelledby="resultsTitle">
+      <div class="results-card card">
+        <p class="eyebrow">Game Results</p>
+        <h2 id="resultsTitle">Great work!</h2>
+        <div id="resultsList" class="results-list"></div>
+        <button id="newGameButton" class="primary-button" type="button">Start New Game</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
