@@ -54,7 +54,6 @@ let currentPrediction = null;
 let currentRoll = null;
 let currentTimePhrases = [];
 let controlsLocked = false;
-let history = [];
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -62,7 +61,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 $('startButton').addEventListener('click', startGame);
 $('rollButton').addEventListener('click', rollDie);
 $('nextTurnButton').addEventListener('click', nextTurn);
-$('resetButton').addEventListener('click', resetGame);
+$('endGameButton').addEventListener('click', endGame);
+$('newGameButton').addEventListener('click', startNewGame);
 
 function startGame() {
   const count = Number(document.querySelector('input[name="playerCount"]:checked').value);
@@ -75,20 +75,29 @@ function startGame() {
   }));
   $('startScreen').classList.add('hidden');
   $('gameScreen').classList.remove('hidden');
-  $('resetButton').classList.remove('hidden');
   drawBoard();
   beginTurn();
 }
 
-function resetGame() {
-  if (!confirm('Reset the game and return to the start screen?')) return;
+function endGame() {
+  if (!confirm('End the game and show the results?')) return;
+  const sorted = [...players].sort((a, b) => b.score - a.score);
+  const topScore = sorted[0]?.score ?? 0;
+  const winners = sorted.filter((p) => p.score === topScore).map((p) => p.name).join(' and ');
+  $('resultsTitle').textContent = winners ? `${winners} wins!` : 'Great work!';
+  $('resultsList').innerHTML = sorted.map((p, index) => `
+    <div class="result-row">
+      <span>${index + 1}. ${p.name}</span><span>${p.score} pts</span>
+    </div>`).join('');
+  $('resultsSplash').classList.remove('hidden');
+}
+
+function startNewGame() {
   players = [];
   currentPlayerIndex = 0;
-  history = [];
+  $('resultsSplash').classList.add('hidden');
   $('gameScreen').classList.add('hidden');
-  $('resetButton').classList.add('hidden');
   $('startScreen').classList.remove('hidden');
-  $('historyLog').innerHTML = '';
 }
 
 function beginTurn() {
@@ -97,10 +106,8 @@ function beginTurn() {
   controlsLocked = false;
   currentTimePhrases = pickSixTimePhrases();
   $('dice').textContent = '?';
-  $('sentencePrompt').className = 'sentence-placeholder';
-  $('sentencePrompt').textContent = 'Roll and land on a space to make a sentence.';
-  $('sayReminder').classList.add('hidden');
-  $('branchChooser').classList.add('hidden');
+  $('turnSummary').textContent = 'Roll to see this turn\'s points.';
+  clearBranchOptions();
   $('nextTurnButton').classList.add('hidden');
   $('rollButton').disabled = true;
   $('turnInstruction').textContent = 'Choose your prediction before rolling.';
@@ -184,13 +191,9 @@ async function resolveTurn() {
   if (landingPoints) showFloating('+1 landing point');
   highlightSpace(landed.id);
 
-  const timePhrase = currentTimePhrases[currentRoll - 1];
-  $('sentencePrompt').className = 'sentence';
-  $('sentencePrompt').textContent = `I have been ${landed.phrase} ${timePhrase}.`;
-  $('sayReminder').classList.remove('hidden');
   const startText = startPasses ? `, earned ${startPasses * 2} START bonus point${startPasses > 1 ? 's' : ''}` : '';
-  addHistory(`${player.name} rolled ${currentRoll}, predicted ${currentPrediction}, got ${bonus} bonus point${startText}, landed on “${landed.phrase}”, and earned ${landingPoints} landing point.`);
-  $('turnInstruction').textContent = 'Read the sentence aloud, then click Next Turn.';
+  $('turnSummary').textContent = `${player.name} rolled ${currentRoll}, predicted ${currentPrediction}, got ${bonus} bonus point${startText}, landed on “${landed.phrase}”, and earned ${landingPoints} landing point.`;
+  $('turnInstruction').textContent = 'Turn complete. Click Next Turn.';
   $('nextTurnButton').classList.remove('hidden');
   controlsLocked = true;
   renderAll();
@@ -219,15 +222,41 @@ async function movePlayer(player, steps) {
 
 function chooseBranch(space) {
   return new Promise((resolve) => {
-    const chooser = $('branchChooser');
-    chooser.innerHTML = `<p>Choose a forward path:</p>${space.next.map((id) => `<button class="path-button" data-path="${id}" type="button">${boardSpaces[id].phrase}</button>`).join('')}`;
-    chooser.classList.remove('hidden');
-    chooser.querySelectorAll('[data-path]').forEach((button) => {
-      button.addEventListener('click', () => {
-        chooser.classList.add('hidden');
-        resolve(Number(button.dataset.path));
-      }, { once: true });
+    $('turnInstruction').textContent = 'Choose a highlighted forward path on the board.';
+    clearBranchOptions();
+    space.next.forEach((id) => {
+      const node = $(`space-${id}`);
+      node.classList.add('branch-option');
+      node.setAttribute('role', 'button');
+      node.setAttribute('tabindex', '0');
+      const choose = () => {
+        clearBranchOptions();
+        resolve(id);
+      };
+      node._branchClick = choose;
+      node.addEventListener('click', choose, { once: true });
+      node.addEventListener('keydown', handleBranchKey);
     });
+  });
+}
+
+function handleBranchKey(event) {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    event.currentTarget.click();
+  }
+}
+
+function clearBranchOptions() {
+  document.querySelectorAll('.branch-option').forEach((node) => {
+    node.classList.remove('branch-option');
+    node.removeAttribute('role');
+    node.removeAttribute('tabindex');
+    if (node._branchClick) {
+      node.removeEventListener('click', node._branchClick);
+      node._branchClick = null;
+    }
+    node.removeEventListener('keydown', handleBranchKey);
   });
 }
 
@@ -303,12 +332,6 @@ function showFloating(message) {
   el.offsetHeight;
   el.style.animation = '';
   setTimeout(() => el.classList.add('hidden'), 1400);
-}
-
-function addHistory(entry) {
-  history.unshift(entry);
-  history = history.slice(0, 10);
-  $('historyLog').innerHTML = history.map((item) => `<li>${item}</li>`).join('');
 }
 
 function nextTurn() {
