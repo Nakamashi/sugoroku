@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sugoroku: I Have Been...</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">English Class Sugoroku</p>
+        <h1>I have been...</h1>
+      </div>
+      <button id="resetButton" class="ghost-button hidden" type="button">Reset Game</button>
+    </header>
+
+    <main>
+      <section id="startScreen" class="start-screen card">
+        <h2>Teacher Settings</h2>
+        <p>Choose the number of players, then start an endless present perfect continuous board game.</p>
+        <fieldset class="player-settings">
+          <legend>How many players?</legend>
+          <label><input type="radio" name="playerCount" value="2" checked /> 2 players</label>
+          <label><input type="radio" name="playerCount" value="3" /> 3 players</label>
+        </fieldset>
+        <button id="startButton" class="primary-button" type="button">Start Game</button>
+      </section>
+
+      <section id="gameScreen" class="game-screen hidden">
+        <aside class="side-panel">
+          <section class="card current-turn">
+            <p class="eyebrow">Current Turn</p>
+            <h2 id="currentPlayerName">Player 1</h2>
+            <p id="turnInstruction">Choose your prediction before rolling.</p>
+          </section>
+
+          <section class="card score-card">
+            <h3>Scores</h3>
+            <div id="scoreboard" class="scoreboard"></div>
+          </section>
+
+          <section class="card time-card">
+            <h3>Time Phrase Table</h3>
+            <p class="small-note">The die roll chooses the matching phrase.</p>
+            <div id="timePhraseTable" class="time-table"></div>
+          </section>
+
+          <section class="card controls-card">
+            <h3>Predict the Roll</h3>
+            <div id="predictionButtons" class="prediction-grid"></div>
+            <div class="dice-row">
+              <div id="dice" class="dice" aria-live="polite">?</div>
+              <button id="rollButton" class="primary-button" type="button" disabled>Roll Die</button>
+            </div>
+            <div id="branchChooser" class="branch-chooser hidden"></div>
+            <button id="nextTurnButton" class="secondary-button hidden" type="button">Next Turn</button>
+          </section>
+        </aside>
+
+        <section class="board-area card">
+          <div id="board" class="board" aria-label="Directed sugoroku board"></div>
+          <div id="floatingMessage" class="floating-message hidden"></div>
+        </section>
+
+        <aside class="right-panel">
+          <section class="card sentence-card">
+            <h3>Sentence Prompt</h3>
+            <p id="sentencePrompt" class="sentence-placeholder">Roll and land on a space to make a sentence.</p>
+            <p id="sayReminder" class="say-reminder hidden">Say this sentence aloud to get your point.</p>
+          </section>
+
+          <section class="card log-card">
+            <h3>Turn History</h3>
+            <ol id="historyLog" class="history-log"></ol>
+          </section>
+        </aside>
+      </section>
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
