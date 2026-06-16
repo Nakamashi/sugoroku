@@ -63,16 +63,33 @@ $('rollButton').addEventListener('click', rollDie);
 $('nextTurnButton').addEventListener('click', nextTurn);
 $('endGameButton').addEventListener('click', endGame);
 $('newGameButton').addEventListener('click', startNewGame);
+document.querySelectorAll('input[name="playerCount"]').forEach((input) => {
+  input.addEventListener('change', renderNameInputs);
+});
+renderNameInputs();
+
+function renderNameInputs() {
+  const count = Number(document.querySelector('input[name="playerCount"]:checked').value);
+  $('nameFields').innerHTML = Array.from({ length: count }, (_, i) => `
+    <label class="name-field">
+      <span>Player ${i + 1} name</span>
+      <input type="text" maxlength="18" value="Player ${i + 1}" data-player-name="${i}" />
+    </label>`).join('');
+}
 
 function startGame() {
   const count = Number(document.querySelector('input[name="playerCount"]:checked').value);
-  players = Array.from({ length: count }, (_, i) => ({
-    name: `Player ${i + 1}`,
-    score: 0,
-    position: 0,
-    color: playerColors[i],
-    token: `P${i + 1}`
-  }));
+  const nameInputs = [...document.querySelectorAll('[data-player-name]')];
+  players = Array.from({ length: count }, (_, i) => {
+    const typedName = nameInputs[i]?.value.trim();
+    return {
+      name: typedName || `Player ${i + 1}`,
+      score: 0,
+      position: 0,
+      color: playerColors[i],
+      token: `P${i + 1}`
+    };
+  });
   $('startScreen').classList.add('hidden');
   $('gameScreen').classList.remove('hidden');
   drawBoard();
@@ -262,7 +279,7 @@ function clearBranchOptions() {
 
 function drawBoard() {
   const board = $('board');
-  board.innerHTML = '';
+  board.innerHTML = '<svg id="pathLayer" class="path-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="arrowHead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M 0 0 L 8 4 L 0 8 z"></path></marker></defs></svg>';
   boardSpaces.forEach((space) => {
     space.next.forEach((nextId) => drawConnector(space, boardSpaces[nextId]));
   });
@@ -286,17 +303,21 @@ function drawBoard() {
 }
 
 function drawConnector(from, to) {
-  const board = $('board');
-  const connector = document.createElement('div');
-  connector.className = 'connector';
+  const pathLayer = $('pathLayer');
   const dx = to.x - from.x;
   const dy = to.y - from.y;
-  const length = Math.sqrt(dx * dx + dy * dy);
-  connector.style.left = `${from.x}%`;
-  connector.style.top = `${from.y}%`;
-  connector.style.width = `${length}%`;
-  connector.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`;
-  board.appendChild(connector);
+  const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+  const unitX = dx / distance;
+  const unitY = dy / distance;
+  const nodePadding = 6.2;
+  const startX = from.x + unitX * nodePadding;
+  const startY = from.y + unitY * nodePadding;
+  const endX = to.x - unitX * nodePadding;
+  const endY = to.y - unitY * nodePadding;
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('class', 'connector');
+  path.setAttribute('d', `M ${startX} ${startY} L ${endX} ${endY}`);
+  pathLayer.appendChild(path);
 }
 
 function updateTokens(moving = false) {
