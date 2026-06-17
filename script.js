@@ -581,47 +581,6 @@ function validateBoardPathLogic() {
   collectBoardWarnings().forEach((warning) => console.warn(warning));
 }
 
-function validateBoardPathLogic() {
-  const mainPathOrder = new Map(mainPathIds.map((id, index) => [id, index]));
-  const branchEntries = new Set(branchEntryIds);
-  const mainPathSpaces = mainPathIds.map((id, index) => boardSpaces[id]?.next.includes(mainPathIds[(index + 1) % mainPathIds.length]));
-  if (mainPathSpaces.some((isConnected) => !isConnected)) {
-    console.warn('The main board loop is missing one or more forward connections.');
-  }
-
-  boardSpaces.forEach((space) => {
-    space.next.forEach((nextId) => {
-      if (!boardSpaces[nextId]) console.warn(`Board space ${space.id} points to missing space ${nextId}.`);
-    });
-  });
-
-  branchEntries.forEach((entryId) => {
-    const entryOrder = mainPathOrder.get(entryId);
-    const branchStarts = boardSpaces[entryId].next.filter((id) => !mainPathOrder.has(id));
-    branchStarts.forEach((startId) => {
-      const visited = new Set();
-      let currentId = startId;
-      while (!mainPathOrder.has(currentId)) {
-        if (visited.has(currentId)) {
-          console.warn(`Branch from ${entryId} loops back to ${currentId}.`);
-          return;
-        }
-        visited.add(currentId);
-        const next = boardSpaces[currentId]?.next || [];
-        if (next.length !== 1) {
-          console.warn(`Branch space ${currentId} must have exactly one forward path.`);
-          return;
-        }
-        currentId = next[0];
-      }
-      const rejoinOrder = mainPathOrder.get(currentId);
-      if (rejoinOrder <= entryOrder && currentId !== 0) {
-        console.warn(`Branch from ${entryId} rejoins at earlier main space ${currentId}.`);
-      }
-    });
-  });
-}
-
 function boardCandidateIds() {
   return boardSpaces.map((space) => space.id).filter((id) => id !== 0);
 }
