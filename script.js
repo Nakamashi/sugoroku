@@ -36,8 +36,8 @@ const ASSISTED_STAR_NEARBY_RANGE = { min: 1, max: 3 };
 const ASSISTED_STAR_CHANCE = 0.65;
 const BOARD_GENERATION_ATTEMPTS = 1000;
 const MIN_SPACE_DISTANCE = 10.5;
-const SPACE_BOX_WIDTH_PERCENT = 12;
-const SPACE_BOX_HEIGHT_PERCENT = 10;
+const SPACE_BOX_WIDTH_PERCENT = 10.8;
+const SPACE_BOX_HEIGHT_PERCENT = 9;
 const SPACE_BOX_PADDING_PERCENT = 2.5;
 const CONNECTOR_SAMPLE_COUNT = 18;
 const MAX_CONNECTOR_CROSSINGS = 1;
@@ -490,27 +490,6 @@ function collectConnectorSpaceWarnings(spaces) {
       }
     });
   });
-  return warnings;
-}
-
-function collectConnectorCrossingWarnings(spaces) {
-  const connectors = getAllConnectors(spaces).map((connector) => ({
-    ...connector,
-    path: getConnectorSamplePoints(connector.from, connector.to)
-  }));
-  let crossings = 0;
-  const warnings = [];
-  connectors.forEach((first, index) => {
-    connectors.slice(index + 1).forEach((second) => {
-      const shared = [first.from.id, first.to.id].some((id) => id === second.from.id || id === second.to.id);
-      if (shared) return;
-      if (pathsIntersect(first.path, second.path)) {
-        crossings += 1;
-        warnings.push(`Connector ${first.from.id}→${first.to.id} crosses connector ${second.from.id}→${second.to.id}.`);
-      }
-    });
-  });
-  if (crossings > MAX_CONNECTOR_CROSSINGS) warnings.push(`Too many connector crossings: ${crossings}.`);
   return warnings;
 }
 
