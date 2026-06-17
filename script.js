@@ -514,6 +514,27 @@ function collectConnectorCrossingWarnings(spaces) {
   return warnings;
 }
 
+function collectConnectorCrossingWarnings(spaces) {
+  const connectors = getAllConnectors(spaces).map((connector) => ({
+    ...connector,
+    path: getConnectorSamplePoints(connector.from, connector.to)
+  }));
+  let crossings = 0;
+  const warnings = [];
+  connectors.forEach((first, index) => {
+    connectors.slice(index + 1).forEach((second) => {
+      const shared = [first.from.id, first.to.id].some((id) => id === second.from.id || id === second.to.id);
+      if (shared) return;
+      if (pathsIntersect(first.path, second.path)) {
+        crossings += 1;
+        warnings.push(`Connector ${first.from.id}→${first.to.id} crosses connector ${second.from.id}→${second.to.id}.`);
+      }
+    });
+  });
+  if (crossings > MAX_CONNECTOR_CROSSINGS) warnings.push(`Too many connector crossings: ${crossings}.`);
+  return warnings;
+}
+
 function shouldShuffleBranchChoices(space) {
   return space.next.length > 1;
 }
