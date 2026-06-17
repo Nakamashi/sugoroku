@@ -27,7 +27,10 @@
           <p class="eyebrow">Current Turn</p>
           <h2 id="currentPlayerName">Player 1</h2>
         </div>
-        <p id="turnInstruction" class="turn-instruction">Choose your prediction before rolling.</p>
+        <div id="gameInfo" class="game-info" aria-live="polite">
+          <p class="model-sentence">START</p>
+          <p class="info-status">Choose a prediction, then roll.</p>
+        </div>
         <button id="endGameButton" class="danger-button" type="button">End Game</button>
       </header>
 
@@ -57,10 +60,6 @@
           <button id="nextTurnButton" class="secondary-button hidden" type="button">Next Turn</button>
         </section>
 
-        <section class="card compact-card turn-summary-card">
-          <h3>Turn Result</h3>
-          <p id="turnSummary">Roll to see this turn's points.</p>
-        </section>
       </aside>
     </section>
 
