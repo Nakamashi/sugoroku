@@ -52,6 +52,7 @@ let controlsLocked = false;
 let activeBonusSpaceId = INITIAL_BONUS_SPACE_ID;
 let ceremonyBonuses = [];
 let ceremonyBonusIndex = 0;
+let ceremonyAnimating = false;
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -380,22 +381,85 @@ function calculateBonusCandidates() {
   return getEndGameBonusDefinitions().map((bonus) => ({ ...bonus, ...getBonusWinners(bonus) }));
 }
 
+function getEndGameBonusCount() {
+  const completedFullRounds = players.length ? Math.min(...players.map((player) => player.stats.turnsTaken)) : 0;
+  if (completedFullRounds >= 7) return 3;
+  if (completedFullRounds >= 4) return 2;
+  return players.some((player) => player.stats.turnsTaken > 0) ? 1 : 0;
+}
+
+function getCandidateBonusAward(bonus) {
+  return { ...bonus, ...getBonusWinners(bonus) };
+}
+
+function getAwardWinnerIds(award) {
+  return award.winners.map((winner) => players.indexOf(winner));
+}
+
+function hasConflictingBonuses(selection) {
+  const ids = selection.map((bonus) => bonus.id);
+  return ids.includes('starless-wonder') && ids.includes('star-hunter');
+}
+
+function scoreBonusSelection(selection, desiredCount) {
+  const winnerCounts = new Map();
+  selection.forEach((bonus) => {
+    getAwardWinnerIds(bonus).forEach((winnerId) => {
+      winnerCounts.set(winnerId, (winnerCounts.get(winnerId) || 0) + 1);
+    });
+  });
+  const uniqueWinnerCount = winnerCounts.size;
+  const maxWinnerCount = Math.max(0, ...winnerCounts.values());
+  let score = selection.length * 100;
+  score += uniqueWinnerCount * 45;
+  if (desiredCount > 1 && uniqueWinnerCount >= 2) score += 90;
+  if (desiredCount > 1 && uniqueWinnerCount < 2) score -= 140;
+  score -= maxWinnerCount > 1 ? (maxWinnerCount - 1) * 35 : 0;
+  score -= selection.filter((bonus) => bonus.allTied).length * 12;
+  if (hasConflictingBonuses(selection)) score -= 70;
+  return score;
+}
+
+function selectDiverseBonusSet(candidates, desiredCount) {
+  if (desiredCount <= 0) return [];
+  const usableCandidates = candidates.filter((bonus) => {
+    const hasUsefulData = !bonus.allTied || !bonus.avoidIfAllTied || candidates.every((candidate) => candidate.allTied);
+    return bonus.winners.length > 0 && hasUsefulData;
+  });
+  const pool = usableCandidates.length >= desiredCount ? usableCandidates : candidates;
+  let bestSelection = [];
+  let bestScore = -Infinity;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const selected = [];
+    shuffle([...pool]).forEach((bonus) => {
+      if (selected.length >= desiredCount) return;
+      const trial = [...selected, bonus];
+      const duplicatedWinnerCounts = new Map();
+      trial.forEach((award) => {
+        getAwardWinnerIds(award).forEach((winnerId) => duplicatedWinnerCounts.set(winnerId, (duplicatedWinnerCounts.get(winnerId) || 0) + 1));
+      });
+      const maxWins = Math.max(0, ...duplicatedWinnerCounts.values());
+      if (selected.length === desiredCount - 1 && desiredCount > 1 && maxWins >= desiredCount) return;
+      if (hasConflictingBonuses(trial) && pool.length > desiredCount) return;
+      selected.push(bonus);
+    });
+    pool.forEach((bonus) => {
+      if (selected.length < desiredCount && !selected.some((item) => item.id === bonus.id)) selected.push(bonus);
+    });
+    const selection = selected.slice(0, desiredCount);
+    const score = scoreBonusSelection(selection, desiredCount) + Math.random();
+    if (score > bestScore) {
+      bestScore = score;
+      bestSelection = selection;
+    }
+  }
+  return bestSelection;
+}
+
 function selectEndGameBonuses() {
-  const targetCount = players.some((p) => p.stats.turnsTaken > 0) ? 3 : 2;
-  const candidates = shuffle(calculateBonusCandidates()).sort((a, b) => Number(a.allTied) - Number(b.allTied));
-  const selected = [];
-  candidates.forEach((bonus) => {
-    if (selected.length >= targetCount) return;
-    if (bonus.avoidIfAllTied && bonus.allTied && candidates.filter((item) => !item.allTied).length >= targetCount) return;
-    if ((bonus.id === 'starless-wonder' && selected.some((item) => item.id === 'star-hunter')) || (bonus.id === 'star-hunter' && selected.some((item) => item.id === 'starless-wonder'))) return;
-    const sameLeadWinnerCount = selected.filter((item) => item.winners[0] === bonus.winners[0]).length;
-    if (sameLeadWinnerCount >= 2 && selected.length < targetCount - 1) return;
-    selected.push(bonus);
-  });
-  candidates.forEach((bonus) => {
-    if (selected.length < targetCount && !selected.some((item) => item.id === bonus.id)) selected.push(bonus);
-  });
-  return selected.slice(0, targetCount);
+  const targetCount = getEndGameBonusCount();
+  const candidates = calculateBonusCandidates().map(getCandidateBonusAward);
+  return selectDiverseBonusSet(candidates, Math.min(targetCount, candidates.length));
 }
 
 function startBonusCeremony() {
@@ -420,7 +484,8 @@ function startBonusCeremony() {
   $('resultsSplash').classList.remove('hidden');
 }
 
-function revealCurrentBonus() {
+async function revealCurrentBonus() {
+  if (ceremonyAnimating) return;
   if (ceremonyBonusIndex >= ceremonyBonuses.length) {
     showFinalResults();
     return;
@@ -435,10 +500,20 @@ function revealCurrentBonus() {
   $('bonusCard').classList.remove('bonus-pop');
   $('bonusCard').offsetHeight;
   $('bonusCard').classList.add('bonus-pop');
+  const previousSnapshot = getCeremonyRankingSnapshot().map((item) => {
+    const row = $('bonusRanking').querySelector(`[data-rank-key="${item.key}"]`);
+    return { ...item, rowTop: row?.getBoundingClientRect().top };
+  });
+  ceremonyAnimating = true;
+  $('bonusRevealButton').disabled = true;
   applyCeremonyBonus(bonus);
+  const newSnapshot = getCeremonyRankingSnapshot();
   ceremonyBonusIndex += 1;
-  renderCeremonyRanking();
+  renderCeremonyRanking({ previousSnapshot, newSnapshot });
+  await animateCeremonyRankingChange(previousSnapshot, newSnapshot);
   $('bonusRevealButton').textContent = ceremonyBonusIndex >= ceremonyBonuses.length ? 'Show Final Results' : 'Next Bonus';
+  $('bonusRevealButton').disabled = false;
+  ceremonyAnimating = false;
 }
 
 function applyCeremonyBonus(bonus) {
@@ -448,14 +523,99 @@ function applyCeremonyBonus(bonus) {
   });
 }
 
-function renderCeremonyRanking() {
-  const sorted = [...players].sort((a, b) => b.score - a.score);
-  $('bonusRanking').innerHTML = `<h3>Live Ranking</h3>${sorted.map((player, index) => `
-    <div class="bonus-rank-row">
-      <span>${index + 1}. ${player.name}</span>
-      <span>${player.score} pts <small>(Bonus +${player.endGameBonusPoints})</small></span>
-    </div>`).join('')}`;
+function getRankingRowKey(player) {
+  return `player-${players.indexOf(player)}`;
+}
+
+function getSortedCeremonyPlayers() {
+  return [...players].sort((a, b) => (b.score - a.score) || (players.indexOf(a) - players.indexOf(b)));
+}
+
+function getCeremonyRankingSnapshot() {
+  return getSortedCeremonyPlayers().map((player, rank) => ({
+    key: getRankingRowKey(player),
+    player,
+    rank,
+    score: player.score,
+    bonus: player.endGameBonusPoints
+  }));
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function renderCeremonyRanking({ previousSnapshot = null, newSnapshot = null } = {}) {
+  const snapshot = newSnapshot || getCeremonyRankingSnapshot();
+  $('bonusRanking').innerHTML = `<h3>Live Ranking</h3>${snapshot.map((item, index) => {
+    const previous = previousSnapshot?.find((oldItem) => oldItem.key === item.key);
+    const movementClass = previous && previous.rank > item.rank ? ' rank-up' : previous && previous.rank < item.rank ? ' rank-down' : '';
+    const startScore = previous ? previous.score : item.score;
+    const startBonus = previous ? previous.bonus : item.bonus;
+    return `
+    <div class="bonus-rank-row${movementClass}" data-rank-key="${item.key}">
+      <span>${index + 1}. ${item.player.name}</span>
+      <span><span data-score-value>${startScore}</span> pts <small>(Bonus +<span data-bonus-value>${startBonus}</span>)</small></span>
+    </div>`;
+  }).join('')}`;
   renderScoreboard();
+}
+
+function animateNumber(element, from, to, duration, formatter = (value) => String(value)) {
+  if (!element || prefersReducedMotion() || from === to) {
+    if (element) element.textContent = formatter(to);
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const start = performance.now();
+    const step = (now) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - ((1 - progress) ** 3);
+      element.textContent = formatter(Math.round(from + ((to - from) * eased)));
+      if (progress < 1) requestAnimationFrame(step);
+      else resolve();
+    };
+    requestAnimationFrame(step);
+  });
+}
+
+function applyFlipAnimation(previousPositions, previousSnapshot, newSnapshot) {
+  if (prefersReducedMotion()) return Promise.resolve();
+  const animations = [];
+  newSnapshot.forEach((item) => {
+    const row = $(`bonusRanking`).querySelector(`[data-rank-key="${item.key}"]`);
+    const previousTop = previousPositions.get(item.key);
+    if (!row || previousTop === undefined) return;
+    const deltaY = previousTop - row.getBoundingClientRect().top;
+    if (deltaY === 0) return;
+    row.style.transform = `translateY(${deltaY}px)`;
+    row.style.transition = 'transform 0s';
+    row.offsetHeight;
+    animations.push(new Promise((resolve) => {
+      row.style.transition = 'transform .72s cubic-bezier(.2, 1, .3, 1)';
+      row.style.transform = '';
+      row.addEventListener('transitionend', resolve, { once: true });
+      setTimeout(resolve, 850);
+    }));
+  });
+  return Promise.all(animations);
+}
+
+function animateCeremonyRankingChange(previousSnapshot, newSnapshot) {
+  const previousPositions = new Map(previousSnapshot.map((item) => [item.key, item.rowTop]).filter((item) => item[1] !== undefined));
+  if (!previousPositions.size) {
+    document.querySelectorAll('[data-rank-key]').forEach((row) => previousPositions.set(row.dataset.rankKey, row.getBoundingClientRect().top));
+  }
+  const numberAnimations = newSnapshot.flatMap((item) => {
+    const previous = previousSnapshot.find((oldItem) => oldItem.key === item.key) || item;
+    const row = $('bonusRanking').querySelector(`[data-rank-key="${item.key}"]`);
+    return [
+      animateNumber(row?.querySelector('[data-bonus-value]'), previous.bonus, item.bonus, 720),
+      animateNumber(row?.querySelector('[data-score-value]'), previous.score, item.score, 720)
+    ];
+  });
+  const flipAnimation = applyFlipAnimation(previousPositions, previousSnapshot, newSnapshot);
+  return Promise.all([...numberAnimations, flipAnimation]);
 }
 
 function showFinalResults() {
