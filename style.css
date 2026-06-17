@@ -72,9 +72,9 @@ h3 { margin: 0 0 8px; font-size: 1.25rem; }
 .path-layer { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
 .path-layer marker path { fill: #335c81; stroke: white; stroke-width: .8; }
 .connector-outline, .connector { fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-.connector-outline { stroke: rgba(255,255,255,.95); stroke-width: 8; opacity: .98; }
-.connector { stroke: #335c81; stroke-width: 4.2; opacity: .95; marker-end: url(#arrowHead); filter: drop-shadow(0 2px 2px rgba(37,50,71,.2)); }
-.space { position: absolute; width: 146px; min-height: 78px; transform: translate(-50%, -50%); border-radius: 20px; border: 4px solid #ffffff; background: linear-gradient(180deg, #ffffff 0%, #f6fbff 72%, #e8f3ff 100%); box-shadow: 0 8px 0 rgba(51,92,129,.18), 0 12px 22px rgba(0,0,0,.18); display: grid; place-items: center; text-align: center; padding: 14px 9px 9px; font-size: .94rem; line-height: 1.08; font-weight: 1000; z-index: 3; transition: transform .2s ease, box-shadow .2s ease, outline .2s ease; }
+.connector-outline { stroke: rgba(255,255,255,.92); stroke-width: 4.5; opacity: .94; }
+.connector { stroke: #335c81; stroke-width: 2.4; opacity: .9; marker-end: url(#arrowHead); filter: drop-shadow(0 1px 1px rgba(37,50,71,.16)); }
+.space { position: absolute; width: 132px; min-height: 72px; transform: translate(-50%, -50%); border-radius: 20px; border: 4px solid #ffffff; background: linear-gradient(180deg, #ffffff 0%, #f6fbff 72%, #e8f3ff 100%); box-shadow: 0 8px 0 rgba(51,92,129,.18), 0 12px 22px rgba(0,0,0,.18); display: grid; place-items: center; text-align: center; padding: 14px 9px 9px; font-size: .9rem; line-height: 1.08; font-weight: 1000; z-index: 3; transition: transform .2s ease, box-shadow .2s ease, outline .2s ease; }
 .space::before { content: ""; position: absolute; inset: 0 0 auto; height: 13px; border-radius: 15px 15px 0 0; background: linear-gradient(90deg, var(--blue), var(--purple)); }
 .space-label { position: relative; z-index: 2; }
 .space.start { background: linear-gradient(180deg, #fff4a8, #ffd166); border-color: #ff9f1c; color: #5a3600; font-size: 1.35rem; letter-spacing: .06em; box-shadow: 0 8px 0 rgba(255,159,28,.32), 0 0 0 7px rgba(255,209,102,.28), 0 14px 26px rgba(0,0,0,.2); }
