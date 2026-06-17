@@ -221,7 +221,7 @@ function generateBranchPositions(entry, rejoin, length) {
 }
 
 function createFallbackBoardLayout() {
-  const mainPositions = [
+  const baseMainPositions = [
     { x: 24, y: 50 },
     { x: 25, y: 22 },
     { x: 41, y: 12 },
@@ -236,25 +236,78 @@ function createFallbackBoardLayout() {
     { x: 9, y: 65 },
     { x: 9, y: 35 }
   ];
-  const mainCount = mainPositions.length;
-  const mainIds = Array.from({ length: mainCount }, (_, id) => id);
+  const baseBranchTemplates = [
+    [
+      { entry: 1, rejoin: 5, ids: [13, 14, 15], positions: [{ x: 37, y: 35 }, { x: 53, y: 39 }, { x: 70, y: 47 }] },
+      { entry: 7, rejoin: 11, ids: [16, 17, 18], positions: [{ x: 68, y: 66 }, { x: 52, y: 68 }, { x: 36, y: 66 }] }
+    ],
+    [
+      { entry: 2, rejoin: 6, ids: [13, 14, 15], positions: [{ x: 49, y: 30 }, { x: 66, y: 39 }, { x: 77, y: 52 }] },
+      { entry: 8, rejoin: 12, ids: [16, 17, 18], positions: [{ x: 61, y: 70 }, { x: 44, y: 66 }, { x: 28, y: 58 }] }
+    ]
+  ];
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const mirrorX = Math.random() < 0.5;
+    const mirrorY = Math.random() < 0.5;
+    const nudge = { x: randomBetween(-1.2, 1.2), y: randomBetween(-1.2, 1.2) };
+    const jitter = attempt < 60 ? 0.8 : 0;
+    const transformPoint = (point) => clampPoint({
+      x: (mirrorX ? 100 - point.x : point.x) + nudge.x + randomBetween(-jitter, jitter),
+      y: (mirrorY ? 100 - point.y : point.y) + nudge.y + randomBetween(-jitter, jitter)
+    });
+    const mainPositions = baseMainPositions.map(transformPoint);
+    const branchTemplates = baseBranchTemplates[randomInt(0, baseBranchTemplates.length - 1)];
+    const mainCount = mainPositions.length;
+    const mainIds = Array.from({ length: mainCount }, (_, id) => id);
+    const spaces = mainIds.map((id, index) => ({
+      id,
+      x: mainPositions[index].x,
+      y: mainPositions[index].y,
+      next: [index === mainCount - 1 ? 0 : id + 1]
+    }));
+    branchTemplates.forEach((branch) => {
+      spaces[branch.entry].next.push(branch.ids[0]);
+      branch.ids.forEach((id, index) => {
+        const position = transformPoint(branch.positions[index]);
+        spaces.push({
+          id,
+          x: position.x,
+          y: position.y,
+          next: [index === branch.ids.length - 1 ? branch.rejoin : branch.ids[index + 1]]
+        });
+      });
+    });
+    const connectorCurveSign = mirrorX === mirrorY ? 1 : -1;
+    const candidate = {
+      spaces,
+      mainPathIds: mainIds,
+      branchEntryIds: branchTemplates.map((branch) => branch.entry),
+      connectorCurves: branchTemplates.reduce((curves, branch) => {
+        curves[`${branch.entry}-${branch.ids[0]}`] = 8 * connectorCurveSign;
+        curves[`${branch.ids[branch.ids.length - 1]}-${branch.rejoin}`] = -5 * connectorCurveSign;
+        return curves;
+      }, {})
+    };
+    connectorCurves = candidate.connectorCurves;
+    if (validateGeneratedBoard(spaces, candidate.mainPathIds, candidate.branchEntryIds).ok) return candidate;
+  }
+
+  const mainIds = Array.from({ length: baseMainPositions.length }, (_, id) => id);
   const spaces = mainIds.map((id, index) => ({
     id,
-    x: mainPositions[index].x,
-    y: mainPositions[index].y,
-    next: [index === mainCount - 1 ? 0 : id + 1]
+    x: baseMainPositions[index].x,
+    y: baseMainPositions[index].y,
+    next: [index === baseMainPositions.length - 1 ? 0 : id + 1]
   }));
-  const fallbackBranches = [
-    { entry: 1, rejoin: 5, ids: [13, 14, 15], positions: [{ x: 37, y: 35 }, { x: 53, y: 39 }, { x: 70, y: 47 }] },
-    { entry: 7, rejoin: 11, ids: [16, 17, 18], positions: [{ x: 68, y: 66 }, { x: 52, y: 68 }, { x: 36, y: 66 }] }
-  ];
-  fallbackBranches.forEach((branch) => {
+  baseBranchTemplates[0].forEach((branch) => {
     spaces[branch.entry].next.push(branch.ids[0]);
     branch.ids.forEach((id, index) => {
+      const position = branch.positions[index];
       spaces.push({
         id,
-        x: branch.positions[index].x,
-        y: branch.positions[index].y,
+        x: position.x,
+        y: position.y,
         next: [index === branch.ids.length - 1 ? branch.rejoin : branch.ids[index + 1]]
       });
     });
@@ -437,6 +490,27 @@ function collectConnectorSpaceWarnings(spaces) {
       }
     });
   });
+  return warnings;
+}
+
+function collectConnectorCrossingWarnings(spaces) {
+  const connectors = getAllConnectors(spaces).map((connector) => ({
+    ...connector,
+    path: getConnectorSamplePoints(connector.from, connector.to)
+  }));
+  let crossings = 0;
+  const warnings = [];
+  connectors.forEach((first, index) => {
+    connectors.slice(index + 1).forEach((second) => {
+      const shared = [first.from.id, first.to.id].some((id) => id === second.from.id || id === second.to.id);
+      if (shared) return;
+      if (pathsIntersect(first.path, second.path)) {
+        crossings += 1;
+        warnings.push(`Connector ${first.from.id}→${first.to.id} crosses connector ${second.from.id}→${second.to.id}.`);
+      }
+    });
+  });
+  if (crossings > MAX_CONNECTOR_CROSSINGS) warnings.push(`Too many connector crossings: ${crossings}.`);
   return warnings;
 }
 
