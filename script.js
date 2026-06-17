@@ -21,34 +21,32 @@ const allTimePhrases = [
 const BONUS_SPACE_POINTS = 3;
 const INITIAL_BONUS_SPACE_ID = 5;
 const connectorCurves = {
-  '2-3': -4,
-  '3-4': -3,
-  '3-17': 8,
-  '7-8': -3,
+  '2-3': -3,
+  '3-17': 10,
+  '9-10': -3,
   '12-13': -4,
-  '12-14': 8,
-  '13-0': -8,
-  '16-9': 5,
-  '17-8': -10
+  '12-14': 7,
+  '16-9': 6,
+  '17-8': -8
 };
 const boardSpaces = [
-  { id: 0, phrase: activityPhrases[0], x: 18, y: 72, next: [1] },
-  { id: 1, phrase: activityPhrases[1], x: 8, y: 54, next: [2] },
-  { id: 2, phrase: activityPhrases[2], x: 10, y: 30, next: [3] },
-  { id: 3, phrase: activityPhrases[3], x: 22, y: 13, next: [4, 17] },
-  { id: 4, phrase: activityPhrases[4], x: 40, y: 12, next: [5] },
-  { id: 5, phrase: activityPhrases[5], x: 58, y: 12, next: [6] },
-  { id: 6, phrase: activityPhrases[6], x: 76, y: 16, next: [7] },
-  { id: 7, phrase: activityPhrases[7], x: 90, y: 33, next: [8] },
-  { id: 8, phrase: activityPhrases[8], x: 90, y: 56, next: [9] },
-  { id: 9, phrase: activityPhrases[9], x: 82, y: 78, next: [10] },
+  { id: 0, phrase: activityPhrases[0], x: 14, y: 68, next: [1] },
+  { id: 1, phrase: activityPhrases[1], x: 10, y: 45, next: [2] },
+  { id: 2, phrase: activityPhrases[2], x: 12, y: 22, next: [3] },
+  { id: 3, phrase: activityPhrases[3], x: 28, y: 12, next: [4, 17] },
+  { id: 4, phrase: activityPhrases[4], x: 46, y: 12, next: [5] },
+  { id: 5, phrase: activityPhrases[5], x: 64, y: 12, next: [6] },
+  { id: 6, phrase: activityPhrases[6], x: 82, y: 18, next: [7] },
+  { id: 7, phrase: activityPhrases[7], x: 90, y: 40, next: [8] },
+  { id: 8, phrase: activityPhrases[8], x: 90, y: 64, next: [9] },
+  { id: 9, phrase: activityPhrases[9], x: 82, y: 86, next: [10] },
   { id: 10, phrase: activityPhrases[10], x: 64, y: 88, next: [11] },
   { id: 11, phrase: activityPhrases[11], x: 46, y: 88, next: [12] },
   { id: 12, phrase: activityPhrases[12], x: 28, y: 88, next: [13, 14] },
-  { id: 13, phrase: activityPhrases[13], x: 10, y: 88, next: [0] },
-  { id: 14, phrase: activityPhrases[14], x: 36, y: 66, next: [15] },
+  { id: 13, phrase: activityPhrases[13], x: 12, y: 90, next: [0] },
+  { id: 14, phrase: activityPhrases[14], x: 34, y: 66, next: [15] },
   { id: 15, phrase: activityPhrases[15], x: 52, y: 66, next: [16] },
-  { id: 16, phrase: activityPhrases[16], x: 68, y: 64, next: [9] },
+  { id: 16, phrase: activityPhrases[16], x: 70, y: 66, next: [9] },
   { id: 17, phrase: activityPhrases[17], x: 56, y: 40, next: [8] }
 ];
 const BONUS_CANDIDATE_SPACE_IDS = boardCandidateIds();
@@ -153,21 +151,13 @@ function renderAll() {
 function updateGameInfo(details = {}) {
   const player = players[currentPlayerIndex];
   const currentSpace = boardSpaces[player?.position ?? 0];
-  const predictionText = currentPrediction ? currentPrediction : 'choose a number';
-  const rollText = currentRoll ? currentRoll : '—';
-  const timePhrase = currentRoll ? currentTimePhrases[currentRoll - 1] : 'roll to get a time phrase';
   const landed = details.landed || currentSpace;
-  const spacePhrase = landed?.phrase || 'START';
-  const practiceResult = landed?.id === 0 || !currentRoll
-    ? '~ing + time'
-    : `${spacePhrase} ${timePhrase}`;
+  const practiceResult = landed?.phrase || 'START';
   let status = 'Choose a prediction, then roll.';
   if (details.status === 'rolling') status = 'Rolling the dice...';
   if (details.status === 'branch') status = 'Choose one highlighted path to continue moving.';
-  if (details.status === 'complete') status = 'Turn complete. Students make the sentence, then click Next Turn.';
+  if (details.status === 'complete') status = 'Turn complete. Students add the time phrase and make the sentence.';
   $('gameInfo').innerHTML = `
-    <p class="info-line"><span>Player:</span> ${player?.name || 'Player 1'} <span>Prediction:</span> ${predictionText} <span>Roll:</span> ${rollText}</p>
-    <p class="info-line"><span>Time:</span> ${timePhrase} <span>Space:</span> ${spacePhrase}</p>
     <p class="model-sentence">${practiceResult}</p>
     <p class="info-status">${status}</p>`;
 }
@@ -341,7 +331,7 @@ function drawConnector(from, to) {
   const distance = Math.sqrt(dx * dx + dy * dy) || 1;
   const unitX = dx / distance;
   const unitY = dy / distance;
-  const nodePadding = 8.2;
+  const nodePadding = 5.2;
   const startX = from.x + unitX * nodePadding;
   const startY = from.y + unitY * nodePadding;
   const endX = to.x - unitX * nodePadding;
