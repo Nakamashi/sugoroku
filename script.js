@@ -1,12 +1,19 @@
 // Edit these arrays to change classroom content.
-const activityPhrases = [
-  'START', 'living in Kanagawa', 'making cakes', 'playing the guitar',
-  'studying English', 'watching movies', 'reading books', 'cooking dinner',
-  'using a computer', 'taking photos', 'playing baseball', 'drinking coffee',
-  'cleaning my room', 'learning Japanese', 'listening to music', 'walking to school',
-  'drawing pictures', 'working at a cafe', 'playing video games', 'practicing piano',
-  'writing stories', 'waiting for a friend', 'talking on the phone', 'exercising every day',
-  'visiting Yokohama'
+const masterActivityPhrases = [
+  'living in Kanagawa', 'making cakes', 'playing the guitar', 'studying English',
+  'watching movies', 'reading books', 'cooking dinner', 'using a computer',
+  'taking photos', 'playing baseball', 'drinking coffee', 'cleaning my room',
+  'learning Japanese', 'listening to music', 'walking to school', 'drawing pictures',
+  'working at a cafe', 'playing video games', 'practicing piano', 'writing stories',
+  'waiting for a friend', 'talking on the phone', 'exercising every day',
+  'visiting Yokohama', 'helping my family', 'playing basketball', 'studying math',
+  'reading manga', 'watching anime', 'making breakfast', 'walking my dog',
+  'playing soccer', 'taking the train', 'writing emails', 'cleaning the classroom',
+  'learning kanji', 'singing songs', 'dancing with friends', 'doing homework',
+  'shopping for groceries', 'riding my bike', 'playing tennis', 'painting pictures',
+  'using a tablet', 'making videos', 'taking care of plants', 'speaking English',
+  'playing cards', 'eating lunch with friends', 'practicing calligraphy',
+  'studying science', 'reading the news', 'making origami', 'playing with my cat'
 ];
 
 const allTimePhrases = [
@@ -16,8 +23,9 @@ const allTimePhrases = [
   'since 2020', 'since I was ten', 'since elementary school', 'since this morning', 'since Monday'
 ];
 
-// The board is a directed graph. Most spaces have exactly one forward option; the
-// few branches are spaced apart so a turn rarely asks students to choose twice.
+// The board is generated from this directed layout template each game. Spaces 0-13
+// form the main loop, while 17-18 and 14-16 are one-way branches that rejoin later
+// spaces on the main loop without cycling back into themselves.
 const BONUS_SPACE_POINTS = 3;
 const INITIAL_BONUS_SPACE_ID = 5;
 const connectorCurves = {
@@ -26,30 +34,34 @@ const connectorCurves = {
   '9-10': -3,
   '12-13': -4,
   '12-14': 7,
-  '16-9': 6,
-  '17-8': -8
+  '16-13': 8,
+  '17-18': 5,
+  '18-8': -8
 };
-const boardSpaces = [
-  { id: 0, phrase: activityPhrases[0], x: 14, y: 68, next: [1] },
-  { id: 1, phrase: activityPhrases[1], x: 10, y: 45, next: [2] },
-  { id: 2, phrase: activityPhrases[2], x: 12, y: 22, next: [3] },
-  { id: 3, phrase: activityPhrases[3], x: 28, y: 12, next: [4, 17] },
-  { id: 4, phrase: activityPhrases[4], x: 46, y: 12, next: [5] },
-  { id: 5, phrase: activityPhrases[5], x: 64, y: 12, next: [6] },
-  { id: 6, phrase: activityPhrases[6], x: 82, y: 18, next: [7] },
-  { id: 7, phrase: activityPhrases[7], x: 90, y: 40, next: [8] },
-  { id: 8, phrase: activityPhrases[8], x: 90, y: 64, next: [9] },
-  { id: 9, phrase: activityPhrases[9], x: 82, y: 86, next: [10] },
-  { id: 10, phrase: activityPhrases[10], x: 64, y: 88, next: [11] },
-  { id: 11, phrase: activityPhrases[11], x: 46, y: 88, next: [12] },
-  { id: 12, phrase: activityPhrases[12], x: 28, y: 88, next: [13, 14] },
-  { id: 13, phrase: activityPhrases[13], x: 12, y: 90, next: [0] },
-  { id: 14, phrase: activityPhrases[14], x: 34, y: 66, next: [15] },
-  { id: 15, phrase: activityPhrases[15], x: 52, y: 66, next: [16] },
-  { id: 16, phrase: activityPhrases[16], x: 70, y: 66, next: [9] },
-  { id: 17, phrase: activityPhrases[17], x: 56, y: 40, next: [8] }
+const mainPathIds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+const branchEntryIds = [3, 12];
+const boardLayoutTemplate = [
+  { id: 0, x: 14, y: 68, next: [1] },
+  { id: 1, x: 10, y: 45, next: [2] },
+  { id: 2, x: 12, y: 22, next: [3] },
+  { id: 3, x: 28, y: 12, next: [4, 17] },
+  { id: 4, x: 46, y: 12, next: [5] },
+  { id: 5, x: 64, y: 12, next: [6] },
+  { id: 6, x: 82, y: 18, next: [7] },
+  { id: 7, x: 90, y: 40, next: [8] },
+  { id: 8, x: 90, y: 64, next: [9] },
+  { id: 9, x: 82, y: 86, next: [10] },
+  { id: 10, x: 64, y: 88, next: [11] },
+  { id: 11, x: 46, y: 88, next: [12] },
+  { id: 12, x: 28, y: 88, next: [13, 14] },
+  { id: 13, x: 12, y: 90, next: [0] },
+  { id: 14, x: 34, y: 66, next: [15] },
+  { id: 15, x: 52, y: 66, next: [16] },
+  { id: 16, x: 70, y: 66, next: [13] },
+  { id: 17, x: 56, y: 40, next: [18] },
+  { id: 18, x: 74, y: 40, next: [8] }
 ];
-const BONUS_CANDIDATE_SPACE_IDS = boardCandidateIds();
+let boardSpaces = generateBoardSpaces();
 
 const playerColors = ['#3578e5', '#ef476f', '#22a06b'];
 let players = [];
@@ -73,6 +85,34 @@ document.querySelectorAll('input[name="playerCount"]').forEach((input) => {
 });
 renderNameInputs();
 
+
+function generateBoardSpaces() {
+  const selectedPhrases = shuffle([...masterActivityPhrases]).slice(0, boardLayoutTemplate.length - 1);
+  const spacesById = new Map(boardLayoutTemplate.map((space) => [space.id, space]));
+  return boardLayoutTemplate.map((space) => {
+    const phrase = space.id === 0 ? 'START' : selectedPhrases.pop();
+    const next = shouldShuffleBranchChoices(space) ? shuffle([...space.next]) : [...space.next];
+    return { ...space, phrase, next };
+  }).sort((a, b) => a.id - b.id).map((space, index) => {
+    if (space.id !== index || !spacesById.has(index)) {
+      throw new Error('Board layout ids must be contiguous and match their array indexes.');
+    }
+    return space;
+  });
+}
+
+function shouldShuffleBranchChoices(space) {
+  return space.next.length > 1;
+}
+
+function shuffle(items) {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+  return items;
+}
+
 function renderNameInputs() {
   const count = Number(document.querySelector('input[name="playerCount"]:checked').value);
   $('nameFields').innerHTML = Array.from({ length: count }, (_, i) => `
@@ -95,6 +135,7 @@ function startGame() {
       token: `P${i + 1}`
     };
   });
+  boardSpaces = generateBoardSpaces();
   activeBonusSpaceId = INITIAL_BONUS_SPACE_ID;
   $('startScreen').classList.add('hidden');
   $('gameScreen').classList.remove('hidden');
@@ -155,8 +196,8 @@ function updateGameInfo(details = {}) {
   const practiceResult = landed?.phrase || 'START';
   let status = 'Choose a prediction, then roll.';
   if (details.status === 'rolling') status = 'Rolling the dice...';
-  if (details.status === 'branch') status = 'Choose one highlighted path to continue moving.';
-  if (details.status === 'complete') status = 'Turn complete. Students add the time phrase and make the sentence.';
+  if (details.status === 'branch') status = 'Choose a path.';
+  if (details.status === 'complete') status = 'Ready for the next turn.';
   $('gameInfo').innerHTML = `
     <p class="model-sentence">${practiceResult}</p>
     <p class="info-status">${status}</p>`;
@@ -300,6 +341,7 @@ function clearBranchOptions() {
 
 function drawBoard() {
   validateBoardLayout();
+  validateBoardPathLogic();
   const board = $('board');
   board.innerHTML = '<svg id="pathLayer" class="path-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="arrowHead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M 1 1 L 7 4 L 1 7 z"></path></marker></defs></svg>';
   boardSpaces.forEach((space) => {
@@ -390,6 +432,47 @@ function validateBoardLayout() {
   });
 }
 
+function validateBoardPathLogic() {
+  const mainPathOrder = new Map(mainPathIds.map((id, index) => [id, index]));
+  const branchEntries = new Set(branchEntryIds);
+  const mainPathSpaces = mainPathIds.map((id, index) => boardSpaces[id]?.next.includes(mainPathIds[(index + 1) % mainPathIds.length]));
+  if (mainPathSpaces.some((isConnected) => !isConnected)) {
+    console.warn('The main board loop is missing one or more forward connections.');
+  }
+
+  boardSpaces.forEach((space) => {
+    space.next.forEach((nextId) => {
+      if (!boardSpaces[nextId]) console.warn(`Board space ${space.id} points to missing space ${nextId}.`);
+    });
+  });
+
+  branchEntries.forEach((entryId) => {
+    const entryOrder = mainPathOrder.get(entryId);
+    const branchStarts = boardSpaces[entryId].next.filter((id) => !mainPathOrder.has(id));
+    branchStarts.forEach((startId) => {
+      const visited = new Set();
+      let currentId = startId;
+      while (!mainPathOrder.has(currentId)) {
+        if (visited.has(currentId)) {
+          console.warn(`Branch from ${entryId} loops back to ${currentId}.`);
+          return;
+        }
+        visited.add(currentId);
+        const next = boardSpaces[currentId]?.next || [];
+        if (next.length !== 1) {
+          console.warn(`Branch space ${currentId} must have exactly one forward path.`);
+          return;
+        }
+        currentId = next[0];
+      }
+      const rejoinOrder = mainPathOrder.get(currentId);
+      if (rejoinOrder <= entryOrder && currentId !== 0) {
+        console.warn(`Branch from ${entryId} rejoins at earlier main space ${currentId}.`);
+      }
+    });
+  });
+}
+
 function boardCandidateIds() {
   return boardSpaces.map((space) => space.id).filter((id) => id !== 0);
 }
@@ -424,7 +507,7 @@ function awardBonusSpace(player, space) {
 
 function pickNextBonusSpace(previousId) {
   const previous = boardSpaces[previousId];
-  const candidates = BONUS_CANDIDATE_SPACE_IDS
+  const candidates = boardCandidateIds()
     .filter((id) => id !== previousId && !players.some((player) => player.position === id))
     .map((id) => {
       const space = boardSpaces[id];
