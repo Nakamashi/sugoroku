@@ -50,6 +50,8 @@ let currentRoll = null;
 let currentTimePhrases = [];
 let controlsLocked = false;
 let activeBonusSpaceId = INITIAL_BONUS_SPACE_ID;
+let ceremonyBonuses = [];
+let ceremonyBonusIndex = 0;
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -59,6 +61,7 @@ $('rollButton').addEventListener('click', rollDie);
 $('nextTurnButton').addEventListener('click', nextTurn);
 $('endGameButton').addEventListener('click', endGame);
 $('newGameButton').addEventListener('click', startNewGame);
+$('bonusRevealButton').addEventListener('click', revealCurrentBonus);
 document.querySelectorAll('input[name="playerCount"]').forEach((input) => {
   input.addEventListener('change', renderNameInputs);
 });
@@ -283,6 +286,42 @@ function renderNameInputs() {
     </label>`).join('');
 }
 
+
+function createInitialPlayerStats() {
+  return {
+    totalDiceRoll: 0,
+    spacesMoved: 0,
+    turnsTaken: 0,
+    correctPredictions: 0,
+    startPasses: 0,
+    exactStartLandings: 0,
+    starBonusesCollected: 0,
+    starBonusPoints: 0,
+    landingPoints: 0,
+    branchChoicesTaken: 0,
+    uniqueSpacesVisited: [0],
+    lowRolls: 0,
+    highRolls: 0
+  };
+}
+
+function recordUniqueSpaceVisit(player, spaceId) {
+  if (!player.stats.uniqueSpacesVisited.includes(spaceId)) {
+    player.stats.uniqueSpacesVisited.push(spaceId);
+  }
+}
+
+function getUniqueSpaceCount(player) {
+  return player.stats.uniqueSpacesVisited.length;
+}
+
+function recordDiceStats(player, roll) {
+  player.stats.totalDiceRoll += roll;
+  player.stats.turnsTaken += 1;
+  if (roll <= 2) player.stats.lowRolls += 1;
+  if (roll >= 5) player.stats.highRolls += 1;
+}
+
 function startGame() {
   const count = Number(document.querySelector('input[name="playerCount"]:checked').value);
   const nameInputs = [...document.querySelectorAll('[data-player-name]')];
@@ -293,7 +332,10 @@ function startGame() {
       score: 0,
       position: 0,
       color: playerColors[i],
-      token: `P${i + 1}`
+      token: `P${i + 1}`,
+      stats: createInitialPlayerStats(),
+      baseScoreBeforeBonuses: 0,
+      endGameBonusPoints: 0
     };
   });
   boardSpaces = generateBoardSpaces();
@@ -306,20 +348,135 @@ function startGame() {
 
 function endGame() {
   if (!confirm('End the game and show the results?')) return;
+  startBonusCeremony();
+}
+
+
+function getEndGameBonusDefinitions() {
+  return [
+    { id: 'tiny-traveler', title: 'Tiny Traveler', subtitle: '省エネ旅人', points: 5, type: 'low', getValue: (p) => p.stats.spacesMoved, explanation: 'Fewest total spaces moved', unit: 'spaces', avoidIfAllTied: true },
+    { id: 'starless-wonder', title: 'Starless Wonder', subtitle: '星なしの奇跡', points: 5, type: 'low', getValue: (p) => p.stats.starBonusesCollected, explanation: 'Fewest star bonuses collected', unit: 'stars', avoidIfAllTied: true },
+    { id: 'slow-steady', title: 'Slow and Steady', subtitle: 'コツコツ名人', points: 4, type: 'low', getValue: (p) => p.stats.totalDiceRoll, explanation: 'Lowest total dice roll', unit: 'dice total', avoidIfAllTied: true },
+    { id: 'small-roller', title: 'Small Roller', subtitle: '小さい目の達人', points: 4, type: 'high', getValue: (p) => p.stats.lowRolls, explanation: 'Most rolls of 1 or 2', unit: 'low rolls', avoidIfAllTied: true },
+    { id: 'prediction-master', title: 'Prediction Master', subtitle: '予想名人', points: 3, type: 'high', getValue: (p) => p.stats.correctPredictions, explanation: 'Most correct dice predictions', unit: 'correct', avoidIfAllTied: true },
+    { id: 'explorer', title: 'Explorer', subtitle: '冒険家', points: 3, type: 'high', getValue: getUniqueSpaceCount, explanation: 'Most unique spaces visited', unit: 'spaces', avoidIfAllTied: true },
+    { id: 'start-sprinter', title: 'Start Sprinter', subtitle: 'スタート通過王', points: 3, type: 'high', getValue: (p) => p.stats.startPasses, explanation: 'Most START passes', unit: 'passes', avoidIfAllTied: true },
+    { id: 'branch-boss', title: 'Branch Boss', subtitle: '分かれ道の達人', points: 2, type: 'high', getValue: (p) => p.stats.branchChoicesTaken, explanation: 'Most branch paths chosen', unit: 'branches', avoidIfAllTied: true },
+    { id: 'star-hunter', title: 'Star Hunter', subtitle: 'スター集め王', points: 2, type: 'high', getValue: (p) => p.stats.starBonusesCollected, explanation: 'Most star bonuses collected', unit: 'stars', avoidIfAllTied: true },
+    { id: 'big-roller', title: 'Big Roller', subtitle: '大きい目の王', points: 2, type: 'high', getValue: (p) => p.stats.highRolls, explanation: 'Most rolls of 5 or 6', unit: 'high rolls', avoidIfAllTied: true },
+    { id: 'lucky-landing', title: 'Lucky Landing', subtitle: 'ラッキー着地賞', points: 2, type: 'high', getValue: (p) => p.stats.landingPoints, explanation: 'Most landing points earned', unit: 'points', avoidIfAllTied: true },
+    { id: 'home-sweet-start', title: 'Home Sweet Start', subtitle: 'スタート大好き賞', points: 2, type: 'high', getValue: (p) => p.stats.exactStartLandings, explanation: 'Most exact landings on START', unit: 'landings', avoidIfAllTied: true }
+  ];
+}
+
+function getBonusWinners(bonus) {
+  const values = players.map((player) => ({ player, value: bonus.getValue(player) }));
+  const target = bonus.type === 'low' ? Math.min(...values.map((item) => item.value)) : Math.max(...values.map((item) => item.value));
+  const allTied = values.every((item) => item.value === values[0].value);
+  return { winners: values.filter((item) => item.value === target).map((item) => item.player), value: target, allTied };
+}
+
+function calculateBonusCandidates() {
+  return getEndGameBonusDefinitions().map((bonus) => ({ ...bonus, ...getBonusWinners(bonus) }));
+}
+
+function selectEndGameBonuses() {
+  const targetCount = players.some((p) => p.stats.turnsTaken > 0) ? 3 : 2;
+  const candidates = shuffle(calculateBonusCandidates()).sort((a, b) => Number(a.allTied) - Number(b.allTied));
+  const selected = [];
+  candidates.forEach((bonus) => {
+    if (selected.length >= targetCount) return;
+    if (bonus.avoidIfAllTied && bonus.allTied && candidates.filter((item) => !item.allTied).length >= targetCount) return;
+    if ((bonus.id === 'starless-wonder' && selected.some((item) => item.id === 'star-hunter')) || (bonus.id === 'star-hunter' && selected.some((item) => item.id === 'starless-wonder'))) return;
+    const sameLeadWinnerCount = selected.filter((item) => item.winners[0] === bonus.winners[0]).length;
+    if (sameLeadWinnerCount >= 2 && selected.length < targetCount - 1) return;
+    selected.push(bonus);
+  });
+  candidates.forEach((bonus) => {
+    if (selected.length < targetCount && !selected.some((item) => item.id === bonus.id)) selected.push(bonus);
+  });
+  return selected.slice(0, targetCount);
+}
+
+function startBonusCeremony() {
+  players.forEach((player) => {
+    player.baseScoreBeforeBonuses = player.score;
+    player.endGameBonusPoints = 0;
+  });
+  ceremonyBonuses = selectEndGameBonuses();
+  ceremonyBonusIndex = 0;
+  $('resultsTitle').textContent = 'Bonus Time!';
+  $('resultsList').classList.add('hidden');
+  $('bonusCeremony').classList.remove('hidden');
+  $('bonusRevealButton').classList.remove('hidden');
+  $('bonusRevealButton').textContent = ceremonyBonuses.length ? 'Reveal Bonus' : 'Show Final Results';
+  $('bonusStepLabel').textContent = ceremonyBonuses.length ? `Bonus 1 of ${ceremonyBonuses.length}` : 'Final Results';
+  $('bonusTitle').textContent = ceremonyBonuses.length ? 'Mystery Bonus' : 'No bonus awards';
+  $('bonusSubtitle').textContent = 'ボーナスタイム！';
+  $('bonusPoints').textContent = '???';
+  $('bonusExplanation').textContent = ceremonyBonuses.length ? 'Press Reveal Bonus to see the first award.' : 'Great job playing!';
+  $('bonusWinners').textContent = 'Who will get it?';
+  renderCeremonyRanking();
+  $('resultsSplash').classList.remove('hidden');
+}
+
+function revealCurrentBonus() {
+  if (ceremonyBonusIndex >= ceremonyBonuses.length) {
+    showFinalResults();
+    return;
+  }
+  const bonus = ceremonyBonuses[ceremonyBonusIndex];
+  $('bonusStepLabel').textContent = `Bonus ${ceremonyBonusIndex + 1} of ${ceremonyBonuses.length}`;
+  $('bonusTitle').textContent = bonus.title;
+  $('bonusSubtitle').textContent = bonus.subtitle;
+  $('bonusPoints').textContent = `+${bonus.points} pts`;
+  $('bonusExplanation').textContent = `${bonus.explanation} (${bonus.value} ${bonus.unit})`;
+  $('bonusWinners').textContent = bonus.winners.map((player) => player.name).join(' and ');
+  $('bonusCard').classList.remove('bonus-pop');
+  $('bonusCard').offsetHeight;
+  $('bonusCard').classList.add('bonus-pop');
+  applyCeremonyBonus(bonus);
+  ceremonyBonusIndex += 1;
+  renderCeremonyRanking();
+  $('bonusRevealButton').textContent = ceremonyBonusIndex >= ceremonyBonuses.length ? 'Show Final Results' : 'Next Bonus';
+}
+
+function applyCeremonyBonus(bonus) {
+  bonus.winners.forEach((player) => {
+    player.score += bonus.points;
+    player.endGameBonusPoints += bonus.points;
+  });
+}
+
+function renderCeremonyRanking() {
+  const sorted = [...players].sort((a, b) => b.score - a.score);
+  $('bonusRanking').innerHTML = `<h3>Live Ranking</h3>${sorted.map((player, index) => `
+    <div class="bonus-rank-row">
+      <span>${index + 1}. ${player.name}</span>
+      <span>${player.score} pts <small>(Bonus +${player.endGameBonusPoints})</small></span>
+    </div>`).join('')}`;
+  renderScoreboard();
+}
+
+function showFinalResults() {
   const sorted = [...players].sort((a, b) => b.score - a.score);
   const topScore = sorted[0]?.score ?? 0;
   const winners = sorted.filter((p) => p.score === topScore).map((p) => p.name).join(' and ');
   $('resultsTitle').textContent = winners ? `${winners} wins!` : 'Great work!';
+  $('bonusCeremony').classList.add('hidden');
+  $('resultsList').classList.remove('hidden');
   $('resultsList').innerHTML = sorted.map((p, index) => `
-    <div class="result-row">
-      <span>${index + 1}. ${p.name}</span><span>${p.score} pts</span>
+    <div class="result-row final-result-row">
+      <span>${index + 1}. ${p.name}</span>
+      <span>Base: ${p.baseScoreBeforeBonuses} / Bonus: +${p.endGameBonusPoints} / Final: ${p.score} pts</span>
     </div>`).join('');
-  $('resultsSplash').classList.remove('hidden');
 }
 
 function startNewGame() {
   players = [];
   currentPlayerIndex = 0;
+  ceremonyBonuses = [];
+  ceremonyBonusIndex = 0;
   $('resultsSplash').classList.add('hidden');
   $('gameScreen').classList.add('hidden');
   $('startScreen').classList.remove('hidden');
@@ -409,6 +566,7 @@ async function rollDie() {
     await sleep(110);
   }
   currentRoll = getAssistedDieRoll(players[currentPlayerIndex]);
+  recordDiceStats(players[currentPlayerIndex], currentRoll);
   $('dice').classList.remove('rolling');
   $('dice').textContent = currentRoll;
   renderTimeTable();
@@ -420,6 +578,7 @@ async function resolveTurn() {
   const bonus = currentPrediction === currentRoll ? 1 : 0;
   if (bonus) {
     player.score += 1;
+    player.stats.correctPredictions += 1;
     showPredictionCelebration();
     await sleep(1600);
   }
@@ -428,6 +587,7 @@ async function resolveTurn() {
   const landed = boardSpaces[player.position];
   const landingPoints = landed.id === 0 ? 0 : 1;
   player.score += landingPoints;
+  if (landingPoints) player.stats.landingPoints += landingPoints;
   if (landingPoints) showFloating('+1 landing point');
   highlightSpace(landed.id);
 
@@ -445,10 +605,14 @@ async function movePlayer(player, steps) {
     let nextId = currentSpace.next[0];
     if (currentSpace.next.length > 1) {
       nextId = await chooseBranch(currentSpace);
+      player.stats.branchChoicesTaken += 1;
     }
     player.position = nextId;
+    player.stats.spacesMoved += 1;
+    recordUniqueSpaceVisit(player, nextId);
     if (nextId === 0) {
       startPasses += 1;
+      player.stats.startPasses += 1;
       player.score += 2;
       animateStartBonus();
       showFloating('+2 START bonus');
@@ -457,6 +621,7 @@ async function movePlayer(player, steps) {
     updateTokens({ movingPlayerIndex: currentPlayerIndex });
     await sleep(700);
   }
+  if (player.position === 0) player.stats.exactStartLandings += 1;
   return { startPasses, starBonus };
 }
 
@@ -687,6 +852,8 @@ function pickAssistedBonusSpaceForPlayer(player, previousId) {
 function awardBonusSpace(player, space) {
   if (space.id !== activeBonusSpaceId) return 0;
   player.score += BONUS_SPACE_POINTS;
+  player.stats.starBonusesCollected += 1;
+  player.stats.starBonusPoints += BONUS_SPACE_POINTS;
   showFloating(`Star bonus! +${BONUS_SPACE_POINTS}`);
   const oldBonusId = activeBonusSpaceId;
   activeBonusSpaceId = pickNextBonusSpace(oldBonusId);
