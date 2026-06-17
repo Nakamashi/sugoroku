@@ -23,44 +23,18 @@ const allTimePhrases = [
   'since 2020', 'since I was ten', 'since elementary school', 'since this morning', 'since Monday'
 ];
 
-// The board is generated from this directed layout template each game. Spaces 0-13
-// form the main loop, while 17-18 and 14-16 are one-way branches that rejoin later
-// spaces on the main loop without cycling back into themselves.
+// The board is generated each game. START always has id 0; the other
+// spaces are arranged dynamically into one main loop plus one-way branches.
+const TOTAL_PROMPT_SPACES = 18;
+const TOTAL_BOARD_SPACES = TOTAL_PROMPT_SPACES + 1;
 const BONUS_SPACE_POINTS = 3;
 const INITIAL_BONUS_SPACE_ID = 5;
-const connectorCurves = {
-  '2-3': -3,
-  '3-17': 10,
-  '9-10': -3,
-  '12-13': -4,
-  '12-14': 7,
-  '16-13': 8,
-  '17-18': 5,
-  '18-8': -8
-};
-const mainPathIds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
-const branchEntryIds = [3, 12];
-const boardLayoutTemplate = [
-  { id: 0, x: 14, y: 68, next: [1] },
-  { id: 1, x: 10, y: 45, next: [2] },
-  { id: 2, x: 12, y: 22, next: [3] },
-  { id: 3, x: 28, y: 12, next: [4, 17] },
-  { id: 4, x: 46, y: 12, next: [5] },
-  { id: 5, x: 64, y: 12, next: [6] },
-  { id: 6, x: 82, y: 18, next: [7] },
-  { id: 7, x: 90, y: 40, next: [8] },
-  { id: 8, x: 90, y: 64, next: [9] },
-  { id: 9, x: 82, y: 86, next: [10] },
-  { id: 10, x: 64, y: 88, next: [11] },
-  { id: 11, x: 46, y: 88, next: [12] },
-  { id: 12, x: 28, y: 88, next: [13, 14] },
-  { id: 13, x: 12, y: 90, next: [0] },
-  { id: 14, x: 34, y: 66, next: [15] },
-  { id: 15, x: 52, y: 66, next: [16] },
-  { id: 16, x: 70, y: 66, next: [13] },
-  { id: 17, x: 56, y: 40, next: [18] },
-  { id: 18, x: 74, y: 40, next: [8] }
-];
+const BOARD_GENERATION_ATTEMPTS = 250;
+const MIN_SPACE_DISTANCE = 10.5;
+const BOARD_BOUNDS = { minX: 9, maxX: 91, minY: 12, maxY: 88 };
+let connectorCurves = {};
+let mainPathIds = [];
+let branchEntryIds = [];
 let boardSpaces = generateBoardSpaces();
 
 const playerColors = ['#3578e5', '#ef476f', '#22a06b'];
@@ -86,19 +60,186 @@ document.querySelectorAll('input[name="playerCount"]').forEach((input) => {
 renderNameInputs();
 
 
+
 function generateBoardSpaces() {
-  const selectedPhrases = shuffle([...masterActivityPhrases]).slice(0, boardLayoutTemplate.length - 1);
-  const spacesById = new Map(boardLayoutTemplate.map((space) => [space.id, space]));
-  return boardLayoutTemplate.map((space) => {
-    const phrase = space.id === 0 ? 'START' : selectedPhrases.pop();
-    const next = shouldShuffleBranchChoices(space) ? shuffle([...space.next]) : [...space.next];
-    return { ...space, phrase, next };
-  }).sort((a, b) => a.id - b.id).map((space, index) => {
-    if (space.id !== index || !spacesById.has(index)) {
-      throw new Error('Board layout ids must be contiguous and match their array indexes.');
+  for (let attempt = 0; attempt < BOARD_GENERATION_ATTEMPTS; attempt += 1) {
+    const layout = generateBoardLayout();
+    const selectedPhrases = shuffle([...masterActivityPhrases]).slice(0, TOTAL_PROMPT_SPACES);
+    const generatedSpaces = layout.spaces.map((space) => ({
+      ...space,
+      phrase: space.id === 0 ? 'START' : selectedPhrases.pop(),
+      next: shouldShuffleBranchChoices(space) ? shuffle([...space.next]) : [...space.next]
+    })).sort((a, b) => a.id - b.id);
+    const validation = validateGeneratedBoard(generatedSpaces, layout.mainPathIds, layout.branchEntryIds);
+    if (validation.ok) {
+      connectorCurves = layout.connectorCurves;
+      mainPathIds = layout.mainPathIds;
+      branchEntryIds = layout.branchEntryIds;
+      return generatedSpaces;
     }
-    return space;
+  }
+  throw new Error('Could not generate a playable board layout.');
+}
+
+function generateBoardLayout() {
+  const mainCount = randomInt(13, 15);
+  const branchSpaceCount = TOTAL_BOARD_SPACES - mainCount;
+  const branchCount = branchSpaceCount >= 4 && Math.random() < 0.72 ? 2 : 1;
+  const branchLengths = splitBranchLengths(branchSpaceCount, branchCount);
+  const mainIds = Array.from({ length: mainCount }, (_, id) => id);
+  const mainPositions = generateMainLoopPositions(mainCount);
+  const spaces = mainIds.map((id, index) => ({
+    id,
+    x: mainPositions[index].x,
+    y: mainPositions[index].y,
+    next: [index === mainCount - 1 ? 0 : id + 1]
+  }));
+  const connectorCurveMap = {};
+  const branches = chooseBranches(mainCount, branchLengths);
+  let nextBranchId = mainCount;
+  const usedBranchEntryIds = [];
+
+  branches.forEach((branch) => {
+    const entryId = branch.entryIndex;
+    const rejoinId = branch.rejoinIndex;
+    const branchIds = Array.from({ length: branch.length }, () => nextBranchId++);
+    const branchPositions = generateBranchPositions(mainPositions[entryId], mainPositions[rejoinId], branch.length);
+    spaces[entryId].next.push(branchIds[0]);
+    usedBranchEntryIds.push(entryId);
+    branchIds.forEach((id, index) => {
+      spaces.push({
+        id,
+        x: branchPositions[index].x,
+        y: branchPositions[index].y,
+        next: [index === branchIds.length - 1 ? rejoinId : branchIds[index + 1]]
+      });
+    });
+    connectorCurveMap[`${entryId}-${branchIds[0]}`] = branch.curve;
+    connectorCurveMap[`${branchIds[branchIds.length - 1]}-${rejoinId}`] = branch.curve * -0.65;
   });
+
+  return {
+    spaces,
+    mainPathIds: mainIds,
+    branchEntryIds: usedBranchEntryIds,
+    connectorCurves: connectorCurveMap
+  };
+}
+
+function splitBranchLengths(totalBranchSpaces, branchCount) {
+  if (branchCount === 1) return [totalBranchSpaces];
+  const first = randomInt(2, totalBranchSpaces - 2);
+  return shuffle([first, totalBranchSpaces - first]);
+}
+
+function generateMainLoopPositions(count) {
+  const centerX = 50 + randomBetween(-2, 2);
+  const centerY = 50 + randomBetween(-1.5, 1.5);
+  const radiusX = randomBetween(37, 41);
+  const radiusY = randomBetween(33, 37);
+  const startAngle = randomBetween(202, 218);
+  return Array.from({ length: count }, (_, index) => {
+    const angle = startAngle - (index * 360 / count) + randomBetween(-3.5, 3.5);
+    const radians = angle * Math.PI / 180;
+    return clampPoint({
+      x: centerX + radiusX * Math.cos(radians),
+      y: centerY - radiusY * Math.sin(radians)
+    });
+  });
+}
+
+function chooseBranches(mainCount, branchLengths) {
+  const candidateEntries = shuffle(Array.from({ length: mainCount - 6 }, (_, index) => index + 2));
+  const branches = [];
+  branchLengths.forEach((length) => {
+    const minimumGap = Math.min(3, mainCount - 1);
+    const entryIndex = candidateEntries.find((candidate) => branches.every((branch) => Math.abs(branch.entryIndex - candidate) > 2));
+    const fallbackEntry = randomInt(2, Math.max(2, mainCount - 5));
+    const safeEntry = entryIndex ?? fallbackEntry;
+    const maxRejoin = mainCount - 1;
+    const minRejoin = Math.min(maxRejoin, safeEntry + minimumGap);
+    const rejoinIndex = randomInt(minRejoin, maxRejoin);
+    branches.push({
+      entryIndex: safeEntry,
+      rejoinIndex,
+      length,
+      curve: randomBetween(5, 11) * (Math.random() < 0.5 ? -1 : 1)
+    });
+  });
+  return branches.sort((a, b) => a.entryIndex - b.entryIndex);
+}
+
+function generateBranchPositions(entry, rejoin, length) {
+  const dx = rejoin.x - entry.x;
+  const dy = rejoin.y - entry.y;
+  const distance = Math.hypot(dx, dy) || 1;
+  const normal = { x: -dy / distance, y: dx / distance };
+  const midpoint = { x: (entry.x + rejoin.x) / 2, y: (entry.y + rejoin.y) / 2 };
+  const centerDirection = ((50 - midpoint.x) * normal.x + (50 - midpoint.y) * normal.y) >= 0 ? 1 : -1;
+  const offset = randomBetween(13, 22) * centerDirection;
+  return Array.from({ length }, (_, index) => {
+    const t = (index + 1) / (length + 1);
+    const arc = Math.sin(Math.PI * t);
+    return clampPoint({
+      x: entry.x + dx * t + normal.x * offset * arc + randomBetween(-1.5, 1.5),
+      y: entry.y + dy * t + normal.y * offset * arc + randomBetween(-1.5, 1.5)
+    });
+  });
+}
+
+function validateGeneratedBoard(spaces, generatedMainPathIds, generatedBranchEntryIds) {
+  const warnings = collectBoardWarnings(spaces, generatedMainPathIds, generatedBranchEntryIds);
+  return { ok: warnings.length === 0, warnings };
+}
+
+function collectBoardWarnings(spaces = boardSpaces, pathIds = mainPathIds, entryIds = branchEntryIds) {
+  const warnings = [];
+  if (spaces.length !== TOTAL_BOARD_SPACES) warnings.push(`Board must have ${TOTAL_BOARD_SPACES} spaces.`);
+  if (spaces[0]?.id !== 0) warnings.push('START must be space 0.');
+  spaces.forEach((space, index) => {
+    if (space.id !== index) warnings.push(`Board space id ${space.id} does not match index ${index}.`);
+    if (space.x < BOARD_BOUNDS.minX || space.x > BOARD_BOUNDS.maxX || space.y < BOARD_BOUNDS.minY || space.y > BOARD_BOUNDS.maxY) {
+      warnings.push(`Board space ${space.id} is outside the safe board area.`);
+    }
+    spaces.slice(index + 1).forEach((other) => {
+      const distance = Math.hypot(space.x - other.x, space.y - other.y);
+      if (distance < MIN_SPACE_DISTANCE) warnings.push(`Board spaces ${space.id} and ${other.id} are too close: ${distance.toFixed(1)}%.`);
+    });
+    space.next.forEach((nextId) => {
+      if (!spaces[nextId]) warnings.push(`Board space ${space.id} points to missing space ${nextId}.`);
+    });
+  });
+
+  const mainPathOrder = new Map(pathIds.map((id, index) => [id, index]));
+  pathIds.forEach((id, index) => {
+    const nextMainId = pathIds[(index + 1) % pathIds.length];
+    if (!spaces[id]?.next.includes(nextMainId)) warnings.push(`Main path space ${id} is missing forward link to ${nextMainId}.`);
+  });
+  entryIds.forEach((entryId) => {
+    const entryOrder = mainPathOrder.get(entryId);
+    const branchStarts = spaces[entryId].next.filter((id) => !mainPathOrder.has(id));
+    if (!branchStarts.length) warnings.push(`Branch entry ${entryId} has no branch path.`);
+    branchStarts.forEach((startId) => {
+      const visited = new Set();
+      let currentId = startId;
+      while (!mainPathOrder.has(currentId)) {
+        if (visited.has(currentId)) {
+          warnings.push(`Branch from ${entryId} loops back to ${currentId}.`);
+          return;
+        }
+        visited.add(currentId);
+        const next = spaces[currentId]?.next || [];
+        if (next.length !== 1) {
+          warnings.push(`Branch space ${currentId} must have exactly one forward path.`);
+          return;
+        }
+        currentId = next[0];
+      }
+      const rejoinOrder = mainPathOrder.get(currentId);
+      if (rejoinOrder <= entryOrder && currentId !== 0) warnings.push(`Branch from ${entryId} rejoins at earlier main space ${currentId}.`);
+    });
+  });
+  return warnings;
 }
 
 function shouldShuffleBranchChoices(space) {
@@ -111,6 +252,21 @@ function shuffle(items) {
     [items[i], items[j]] = [items[j], items[i]];
   }
   return items;
+}
+
+function randomInt(min, max) {
+  return Math.floor(randomBetween(min, max + 1));
+}
+
+function randomBetween(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+function clampPoint(point) {
+  return {
+    x: Math.min(BOARD_BOUNDS.maxX, Math.max(BOARD_BOUNDS.minX, point.x)),
+    y: Math.min(BOARD_BOUNDS.maxY, Math.max(BOARD_BOUNDS.minY, point.y))
+  };
 }
 
 function renderNameInputs() {
@@ -418,18 +574,11 @@ function updateTokens(options = {}) {
 
 
 function validateBoardLayout() {
-  const minimumDistance = 16;
-  boardSpaces.forEach((space, i) => {
-    if (space.x < 6 || space.x > 94 || space.y < 10 || space.y > 90) {
-      console.warn(`Board space ${space.id} is close to the board edge.`);
-    }
-    boardSpaces.slice(i + 1).forEach((other) => {
-      const distance = Math.hypot(space.x - other.x, space.y - other.y);
-      if (distance < minimumDistance) {
-        console.warn(`Board spaces ${space.id} and ${other.id} are too close: ${distance.toFixed(1)}%.`);
-      }
-    });
-  });
+  collectBoardWarnings().forEach((warning) => console.warn(warning));
+}
+
+function validateBoardPathLogic() {
+  collectBoardWarnings().forEach((warning) => console.warn(warning));
 }
 
 function validateBoardPathLogic() {
