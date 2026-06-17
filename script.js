@@ -20,41 +20,36 @@ const allTimePhrases = [
 // few branches are spaced apart so a turn rarely asks students to choose twice.
 const BONUS_SPACE_POINTS = 3;
 const INITIAL_BONUS_SPACE_ID = 5;
-const BONUS_CANDIDATE_SPACE_IDS = boardCandidateIds();
 const connectorCurves = {
-  '3-8': 14,
-  '8-9': -8,
-  '13-18': -16,
-  '18-19': 10,
-  '23-0': -12
+  '2-3': -3,
+  '3-17': 10,
+  '9-10': -3,
+  '12-13': -4,
+  '8-16': 8,
+  '14-10': -7,
+  '17-8': -8
 };
 const boardSpaces = [
-  { id: 0, phrase: activityPhrases[0], x: 12, y: 82, next: [1] },
-  { id: 1, phrase: activityPhrases[1], x: 12, y: 58, next: [2] },
-  { id: 2, phrase: activityPhrases[2], x: 12, y: 34, next: [3] },
-  { id: 3, phrase: activityPhrases[3], x: 25, y: 16, next: [4, 8] },
-  { id: 4, phrase: activityPhrases[4], x: 42, y: 16, next: [5] },
-  { id: 5, phrase: activityPhrases[5], x: 59, y: 16, next: [6] },
-  { id: 6, phrase: activityPhrases[6], x: 76, y: 16, next: [7] },
-  { id: 7, phrase: activityPhrases[7], x: 88, y: 34, next: [13] },
-  { id: 8, phrase: activityPhrases[8], x: 31, y: 39, next: [9] },
-  { id: 9, phrase: activityPhrases[9], x: 48, y: 39, next: [10] },
-  { id: 10, phrase: activityPhrases[10], x: 65, y: 39, next: [11] },
-  { id: 11, phrase: activityPhrases[11], x: 82, y: 39, next: [12] },
-  { id: 12, phrase: activityPhrases[12], x: 72, y: 60, next: [13] },
-  { id: 13, phrase: activityPhrases[13], x: 88, y: 60, next: [14, 18] },
-  { id: 14, phrase: activityPhrases[14], x: 70, y: 72, next: [15] },
-  { id: 15, phrase: activityPhrases[15], x: 52, y: 72, next: [16] },
-  { id: 16, phrase: activityPhrases[16], x: 34, y: 72, next: [17] },
-  { id: 17, phrase: activityPhrases[17], x: 18, y: 72, next: [23] },
-  { id: 18, phrase: activityPhrases[18], x: 88, y: 82, next: [19] },
-  { id: 19, phrase: activityPhrases[19], x: 70, y: 90, next: [20] },
-  { id: 20, phrase: activityPhrases[20], x: 52, y: 90, next: [21] },
-  { id: 21, phrase: activityPhrases[21], x: 34, y: 90, next: [22] },
-  { id: 22, phrase: activityPhrases[22], x: 18, y: 90, next: [23] },
-  { id: 23, phrase: activityPhrases[23], x: 8, y: 90, next: [24, 0] },
-  { id: 24, phrase: activityPhrases[24], x: 8, y: 72, next: [0] }
+  { id: 0, phrase: activityPhrases[0], x: 14, y: 68, next: [1] },
+  { id: 1, phrase: activityPhrases[1], x: 10, y: 45, next: [2] },
+  { id: 2, phrase: activityPhrases[2], x: 12, y: 22, next: [3] },
+  { id: 3, phrase: activityPhrases[3], x: 28, y: 12, next: [4, 17] },
+  { id: 4, phrase: activityPhrases[4], x: 46, y: 12, next: [5] },
+  { id: 5, phrase: activityPhrases[5], x: 64, y: 12, next: [6] },
+  { id: 6, phrase: activityPhrases[6], x: 82, y: 18, next: [7] },
+  { id: 7, phrase: activityPhrases[7], x: 90, y: 40, next: [8] },
+  { id: 8, phrase: activityPhrases[8], x: 90, y: 64, next: [9, 16] },
+  { id: 9, phrase: activityPhrases[9], x: 82, y: 86, next: [10] },
+  { id: 10, phrase: activityPhrases[10], x: 64, y: 88, next: [11] },
+  { id: 11, phrase: activityPhrases[11], x: 46, y: 88, next: [12] },
+  { id: 12, phrase: activityPhrases[12], x: 28, y: 88, next: [13] },
+  { id: 13, phrase: activityPhrases[13], x: 12, y: 90, next: [0] },
+  { id: 14, phrase: activityPhrases[14], x: 34, y: 66, next: [10] },
+  { id: 15, phrase: activityPhrases[15], x: 52, y: 66, next: [14] },
+  { id: 16, phrase: activityPhrases[16], x: 70, y: 66, next: [15] },
+  { id: 17, phrase: activityPhrases[17], x: 56, y: 40, next: [8] }
 ];
+const BONUS_CANDIDATE_SPACE_IDS = boardCandidateIds();
 
 const playerColors = ['#3578e5', '#ef476f', '#22a06b'];
 let players = [];
@@ -134,11 +129,10 @@ function beginTurn() {
   controlsLocked = false;
   currentTimePhrases = pickSixTimePhrases();
   $('dice').textContent = '?';
-  $('turnSummary').textContent = 'Roll to see this turn\'s points.';
   clearBranchOptions();
   $('nextTurnButton').classList.add('hidden');
   $('rollButton').disabled = true;
-  $('turnInstruction').textContent = 'Choose your prediction before rolling.';
+  updateGameInfo({ status: 'ready' });
   renderAll();
 }
 
@@ -152,6 +146,20 @@ function renderAll() {
   renderPredictionButtons();
   updateTokens();
   $('currentPlayerName').textContent = players[currentPlayerIndex]?.name || 'Player 1';
+}
+
+function updateGameInfo(details = {}) {
+  const player = players[currentPlayerIndex];
+  const currentSpace = boardSpaces[player?.position ?? 0];
+  const landed = details.landed || currentSpace;
+  const practiceResult = landed?.phrase || 'START';
+  let status = 'Choose a prediction, then roll.';
+  if (details.status === 'rolling') status = 'Rolling the dice...';
+  if (details.status === 'branch') status = 'Choose one highlighted path to continue moving.';
+  if (details.status === 'complete') status = 'Turn complete. Students add the time phrase and make the sentence.';
+  $('gameInfo').innerHTML = `
+    <p class="model-sentence">${practiceResult}</p>
+    <p class="info-status">${status}</p>`;
 }
 
 function renderScoreboard() {
@@ -183,6 +191,7 @@ function selectPrediction(number) {
   currentPrediction = number;
   $('rollButton').disabled = false;
   renderPredictionButtons();
+  updateGameInfo();
 }
 
 async function rollDie() {
@@ -190,7 +199,7 @@ async function rollDie() {
   controlsLocked = true;
   $('rollButton').disabled = true;
   renderPredictionButtons();
-  $('turnInstruction').textContent = 'Rolling...';
+  updateGameInfo({ status: 'rolling' });
   $('dice').classList.add('rolling');
   const animationEnd = Date.now() + 1300;
   while (Date.now() < animationEnd) {
@@ -212,18 +221,15 @@ async function resolveTurn() {
     showPredictionCelebration();
     await sleep(1600);
   }
-  const startPasses = await movePlayer(player, currentRoll);
+  const moveResult = await movePlayer(player, currentRoll);
+  const { startPasses, starBonus } = moveResult;
   const landed = boardSpaces[player.position];
   const landingPoints = landed.id === 0 ? 0 : 1;
   player.score += landingPoints;
   if (landingPoints) showFloating('+1 landing point');
-  const starBonus = awardBonusSpace(player, landed);
   highlightSpace(landed.id);
 
-  const startText = startPasses ? `, earned ${startPasses * 2} START bonus point${startPasses > 1 ? 's' : ''}` : '';
-  const starText = starBonus ? `, claimed a Star bonus for +${starBonus}` : '';
-  $('turnSummary').textContent = `${player.name} rolled ${currentRoll}, predicted ${currentPrediction}, got ${bonus} prediction bonus point${startText}, landed on “${landed.phrase}”, earned ${landingPoints} landing point${starText}.`;
-  $('turnInstruction').textContent = 'Turn complete. Click Next Turn.';
+  updateGameInfo({ status: 'complete', landed, predictionBonus: bonus, startPasses, landingPoints, starBonus });
   $('nextTurnButton').classList.remove('hidden');
   controlsLocked = true;
   renderAll();
@@ -231,6 +237,7 @@ async function resolveTurn() {
 
 async function movePlayer(player, steps) {
   let startPasses = 0;
+  let starBonus = 0;
   for (let i = 0; i < steps; i++) {
     const currentSpace = boardSpaces[player.position];
     let nextId = currentSpace.next[0];
@@ -244,15 +251,16 @@ async function movePlayer(player, steps) {
       animateStartBonus();
       showFloating('+2 START bonus');
     }
+    starBonus += awardBonusSpace(player, boardSpaces[nextId]);
     updateTokens({ movingPlayerIndex: currentPlayerIndex });
     await sleep(700);
   }
-  return startPasses;
+  return { startPasses, starBonus };
 }
 
 function chooseBranch(space) {
   return new Promise((resolve) => {
-    $('turnInstruction').textContent = 'Choose a highlighted forward path on the board.';
+    updateGameInfo({ status: 'branch' });
     clearBranchOptions();
     space.next.forEach((id) => {
       const node = $(`space-${id}`);
@@ -291,8 +299,10 @@ function clearBranchOptions() {
 }
 
 function drawBoard() {
+  validateBoardLayout();
+  validateBoardGraph();
   const board = $('board');
-  board.innerHTML = '<svg id="pathLayer" class="path-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="arrowHead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M 0 0 L 8 4 L 0 8 z"></path></marker></defs></svg>';
+  board.innerHTML = '<svg id="pathLayer" class="path-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="arrowHead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M 1 1 L 7 4 L 1 7 z"></path></marker></defs></svg>';
   boardSpaces.forEach((space) => {
     space.next.forEach((nextId) => drawConnector(space, boardSpaces[nextId]));
   });
@@ -322,23 +332,30 @@ function drawConnector(from, to) {
   const distance = Math.sqrt(dx * dx + dy * dy) || 1;
   const unitX = dx / distance;
   const unitY = dy / distance;
-  const nodePadding = 6.2;
+  const nodePadding = 5.2;
   const startX = from.x + unitX * nodePadding;
   const startY = from.y + unitY * nodePadding;
   const endX = to.x - unitX * nodePadding;
   const endY = to.y - unitY * nodePadding;
   const curve = connectorCurves[`${from.id}-${to.id}`] || 0;
+  const outline = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  outline.setAttribute('class', 'connector-outline');
   path.setAttribute('class', 'connector');
   if (curve) {
     const midX = (startX + endX) / 2;
     const midY = (startY + endY) / 2;
     const controlX = midX + (-unitY * curve);
     const controlY = midY + (unitX * curve);
-    path.setAttribute('d', `M ${startX} ${startY} Q ${controlX} ${controlY} ${endX} ${endY}`);
+    const d = `M ${startX} ${startY} Q ${controlX} ${controlY} ${endX} ${endY}`;
+    outline.setAttribute('d', d);
+    path.setAttribute('d', d);
   } else {
-    path.setAttribute('d', `M ${startX} ${startY} L ${endX} ${endY}`);
+    const d = `M ${startX} ${startY} L ${endX} ${endY}`;
+    outline.setAttribute('d', d);
+    path.setAttribute('d', d);
   }
+  pathLayer.appendChild(outline);
   pathLayer.appendChild(path);
 }
 
@@ -348,9 +365,9 @@ function updateTokens(options = {}) {
     const token = $(`token-${i}`);
     if (!token) return;
     const space = boardSpaces[player.position];
-    const offset = (i - 1) * 18;
-    token.style.left = `calc(${space.x}% + ${offset}px)`;
-    token.style.top = `calc(${space.y}% + ${offset}px)`;
+    const dockOffset = [-28, 0, 28][i] || 0;
+    token.style.left = `calc(${space.x}% + ${dockOffset}px)`;
+    token.style.top = `calc(${space.y}% + 58px)`;
     token.classList.toggle('moving', i === movingPlayerIndex);
   });
   if (movingPlayerIndex !== null && movingPlayerIndex !== undefined) {
@@ -359,14 +376,57 @@ function updateTokens(options = {}) {
 }
 
 
+function validateBoardLayout() {
+  const minimumDistance = 16;
+  boardSpaces.forEach((space, i) => {
+    if (space.x < 6 || space.x > 94 || space.y < 10 || space.y > 90) {
+      console.warn(`Board space ${space.id} is close to the board edge.`);
+    }
+    boardSpaces.slice(i + 1).forEach((other) => {
+      const distance = Math.hypot(space.x - other.x, space.y - other.y);
+      if (distance < minimumDistance) {
+        console.warn(`Board spaces ${space.id} and ${other.id} are too close: ${distance.toFixed(1)}%.`);
+      }
+    });
+  });
+}
+
+function validateBoardGraph() {
+  const stack = [];
+  const visitedEdges = new Set();
+
+  function visit(spaceId) {
+    const stackIndex = stack.indexOf(spaceId);
+    if (stackIndex !== -1) {
+      const cycle = stack.slice(stackIndex);
+      if (!cycle.includes(0)) {
+        console.warn(`Board graph has a loop that does not pass START: ${cycle.join(' -> ')} -> ${spaceId}`);
+      }
+      return;
+    }
+
+    stack.push(spaceId);
+    const space = boardSpaces[spaceId];
+    space.next.forEach((nextId) => {
+      const edgeKey = `${spaceId}-${nextId}`;
+      if (visitedEdges.has(edgeKey)) return;
+      visitedEdges.add(edgeKey);
+      visit(nextId);
+    });
+    stack.pop();
+  }
+
+  visit(0);
+}
+
 function boardCandidateIds() {
-  return activityPhrases.map((_, id) => id).filter((id) => id !== 0);
+  return boardSpaces.map((space) => space.id).filter((id) => id !== 0);
 }
 
 function getSpaceContent(space) {
   if (space.id === 0) return 'START';
   const star = space.id === activeBonusSpaceId ? '<span class="bonus-badge" aria-label="Star bonus space">★</span>' : '';
-  return `${star}<span>${space.phrase}</span>`;
+  return `${star}<span class="space-label">${space.phrase}</span>`;
 }
 
 function renderBonusSpaces() {
