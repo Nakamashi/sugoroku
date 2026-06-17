@@ -497,6 +497,7 @@ function clearBranchOptions() {
 
 function drawBoard() {
   validateBoardLayout();
+  validateBoardPathLogic();
   const board = $('board');
   board.innerHTML = '<svg id="pathLayer" class="path-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="arrowHead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M 1 1 L 7 4 L 1 7 z"></path></marker></defs></svg>';
   boardSpaces.forEach((space) => {
