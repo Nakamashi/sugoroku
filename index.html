@@ -67,6 +67,18 @@
       <div class="results-card card">
         <p class="eyebrow">Game Results</p>
         <h2 id="resultsTitle">Great work!</h2>
+        <section id="bonusCeremony" class="bonus-ceremony hidden" aria-live="polite">
+          <div id="bonusCard" class="bonus-card">
+            <p id="bonusStepLabel" class="bonus-step-label">Bonus 1</p>
+            <h3 id="bonusTitle">Bonus Time!</h3>
+            <p id="bonusSubtitle" class="bonus-subtitle">ボーナスタイム！</p>
+            <p id="bonusPoints" class="bonus-points">+0 pts</p>
+            <p id="bonusExplanation" class="bonus-explanation">Press Reveal Bonus to begin.</p>
+            <p id="bonusWinners" class="bonus-winners">Who will get it?</p>
+          </div>
+          <div id="bonusRanking" class="bonus-ranking" aria-label="Live ranking"></div>
+          <button id="bonusRevealButton" class="secondary-button" type="button">Reveal Bonus</button>
+        </section>
         <div id="resultsList" class="results-list"></div>
         <button id="newGameButton" class="primary-button" type="button">Start New Game</button>
       </div>
