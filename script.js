@@ -29,6 +29,11 @@ const TOTAL_PROMPT_SPACES = 18;
 const TOTAL_BOARD_SPACES = TOTAL_PROMPT_SPACES + 1;
 const BONUS_SPACE_POINTS = 3;
 const INITIAL_BONUS_SPACE_ID = 5;
+const LUCK_PROTECTION_THRESHOLD = 10;
+const LUCK_PROTECTION_MAX_DEFICIT = 20;
+const ASSISTED_DICE_WEIGHTS = [1, 1, 1, 1.15, 1.3, 1.45];
+const ASSISTED_STAR_NEARBY_RANGE = { min: 1, max: 3 };
+const ASSISTED_STAR_CHANCE = 0.65;
 const BOARD_GENERATION_ATTEMPTS = 250;
 const MIN_SPACE_DISTANCE = 10.5;
 const BOARD_BOUNDS = { minX: 9, maxX: 91, minY: 12, maxY: 88 };
@@ -403,7 +408,7 @@ async function rollDie() {
     $('dice').textContent = Math.ceil(Math.random() * 6);
     await sleep(110);
   }
-  currentRoll = Math.ceil(Math.random() * 6);
+  currentRoll = getAssistedDieRoll(players[currentPlayerIndex]);
   $('dice').classList.remove('rolling');
   $('dice').textContent = currentRoll;
   renderTimeTable();
@@ -600,6 +605,85 @@ function renderBonusSpaces() {
   });
 }
 
+function getLeaderScore() {
+  if (!players.length) return 0;
+  return Math.max(...players.map((player) => player.score));
+}
+
+function getScoreDeficit(player) {
+  if (!player) return 0;
+  return Math.max(0, getLeaderScore() - player.score);
+}
+
+function getLuckProtectionLevel(player) {
+  const deficit = getScoreDeficit(player);
+  if (deficit < LUCK_PROTECTION_THRESHOLD) return 0;
+  const protectedRange = LUCK_PROTECTION_MAX_DEFICIT - LUCK_PROTECTION_THRESHOLD;
+  if (protectedRange <= 0) return 1;
+  const cappedDeficit = Math.min(deficit, LUCK_PROTECTION_MAX_DEFICIT);
+  return 0.25 + ((cappedDeficit - LUCK_PROTECTION_THRESHOLD) / protectedRange) * 0.75;
+}
+
+function isPlayerBehindEnoughForLuckProtection(player) {
+  return getScoreDeficit(player) >= LUCK_PROTECTION_THRESHOLD;
+}
+
+function weightedRandomDie(weights) {
+  const totalWeight = weights.reduce((total, weight) => total + Math.max(0, weight), 0);
+  if (totalWeight <= 0) return Math.ceil(Math.random() * 6);
+  let pick = Math.random() * totalWeight;
+  for (let i = 0; i < weights.length; i += 1) {
+    pick -= Math.max(0, weights[i]);
+    if (pick <= 0) return i + 1;
+  }
+  return 6;
+}
+
+function getAssistedDieRoll(player) {
+  const normalWeights = [1, 1, 1, 1, 1, 1];
+  const level = getLuckProtectionLevel(player);
+  if (!level) return weightedRandomDie(normalWeights);
+  const weights = normalWeights.map((weight, index) => (
+    weight + ((ASSISTED_DICE_WEIGHTS[index] ?? weight) - weight) * level
+  ));
+  return weightedRandomDie(weights);
+}
+
+function findSpacesAhead(startId, minSteps, maxSteps) {
+  const found = new Set();
+  const queue = [{ id: startId, steps: 0 }];
+  const visited = new Set([`${startId}:0`]);
+
+  while (queue.length) {
+    const { id, steps } = queue.shift();
+    if (steps >= maxSteps) continue;
+    const space = boardSpaces[id];
+    if (!space) continue;
+    space.next.forEach((nextId) => {
+      const nextSteps = steps + 1;
+      const stateKey = `${nextId}:${nextSteps}`;
+      if (visited.has(stateKey)) return;
+      visited.add(stateKey);
+      if (nextSteps >= minSteps && nextSteps <= maxSteps) found.add(nextId);
+      if (nextSteps < maxSteps) queue.push({ id: nextId, steps: nextSteps });
+    });
+  }
+
+  return [...found];
+}
+
+function pickAssistedBonusSpaceForPlayer(player, previousId) {
+  const occupiedIds = new Set(players.map((currentPlayer) => currentPlayer.position));
+  const candidates = findSpacesAhead(
+    player.position,
+    ASSISTED_STAR_NEARBY_RANGE.min,
+    ASSISTED_STAR_NEARBY_RANGE.max
+  ).filter((id) => id !== 0 && id !== previousId && !occupiedIds.has(id));
+
+  if (!candidates.length) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
 function awardBonusSpace(player, space) {
   if (space.id !== activeBonusSpaceId) return 0;
   player.score += BONUS_SPACE_POINTS;
@@ -614,6 +698,19 @@ function awardBonusSpace(player, space) {
 }
 
 function pickNextBonusSpace(previousId) {
+  const assistedPlayers = players
+    .filter(isPlayerBehindEnoughForLuckProtection)
+    .sort((a, b) => getScoreDeficit(b) - getScoreDeficit(a));
+
+  if (assistedPlayers.length && Math.random() < ASSISTED_STAR_CHANCE) {
+    const assistedSpaceId = pickAssistedBonusSpaceForPlayer(assistedPlayers[0], previousId);
+    if (assistedSpaceId !== null) return assistedSpaceId;
+  }
+
+  return pickFarBonusSpace(previousId);
+}
+
+function pickFarBonusSpace(previousId) {
   const previous = boardSpaces[previousId];
   const candidates = boardCandidateIds()
     .filter((id) => id !== previousId && !players.some((player) => player.position === id))
