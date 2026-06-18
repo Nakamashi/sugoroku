@@ -8,17 +8,36 @@
 </head>
 <body>
   <main class="app-shell">
-    <section id="startScreen" class="start-screen card">
+    <section id="modeScreen" class="mode-screen card">
       <p class="eyebrow">Sugoroku</p>
-      <h1>I have been...</h1>
-      <p>Choose number of players and their names.</p>
+      <h1>Choose Your Grammar Game</h1>
+      <p class="menu-help">学年を選んで、すごろくを始めよう！</p>
+      <div class="mode-choice-grid" aria-label="Grammar game choices">
+        <button class="mode-choice-button" type="button" data-mode="jhs2">
+          <span>2年生</span>
+          <strong>will / be going to</strong>
+        </button>
+        <button class="mode-choice-button" type="button" data-mode="jhs3">
+          <span>3年生</span>
+          <strong>have been ~ing</strong>
+        </button>
+      </div>
+    </section>
+
+    <section id="startScreen" class="start-screen card hidden">
+      <p class="eyebrow">Sugoroku</p>
+      <h1 id="setupTitle">Grammar Game</h1>
+      <p id="setupReminder">Choose players and names, then start.</p>
       <fieldset class="player-settings">
         <legend>Players</legend>
         <label><input type="radio" name="playerCount" value="2" checked /> 2</label>
         <label><input type="radio" name="playerCount" value="3" /> 3</label>
       </fieldset>
       <div id="nameFields" class="name-fields" aria-label="Player names"></div>
-      <button id="startButton" class="primary-button" type="button">Start Game</button>
+      <div class="setup-actions">
+        <button id="backToModesButton" class="secondary-button small-button" type="button">Back</button>
+        <button id="startButton" class="primary-button" type="button">Start Game</button>
+      </div>
     </section>
 
     <section id="gameScreen" class="game-screen hidden">

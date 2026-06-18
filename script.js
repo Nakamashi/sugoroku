@@ -1,27 +1,59 @@
-// Edit these arrays to change classroom content.
-const masterActivityPhrases = [
-  'living in Kanagawa', 'making cakes', 'playing the guitar', 'studying English',
-  'watching movies', 'reading books', 'cooking dinner', 'using a computer',
-  'taking photos', 'playing baseball', 'drinking coffee', 'cleaning my room',
-  'learning Japanese', 'listening to music', 'walking to school', 'drawing pictures',
-  'working at a cafe', 'playing video games', 'practicing piano', 'writing stories',
-  'waiting for a friend', 'talking on the phone', 'exercising every day',
-  'visiting Yokohama', 'helping my family', 'playing basketball', 'studying math',
-  'reading manga', 'watching anime', 'making breakfast', 'walking my dog',
-  'playing soccer', 'taking the train', 'writing emails', 'cleaning the classroom',
-  'learning kanji', 'singing songs', 'dancing with friends', 'doing homework',
-  'shopping for groceries', 'riding my bike', 'playing tennis', 'painting pictures',
-  'using a tablet', 'making videos', 'taking care of plants', 'speaking English',
-  'playing cards', 'eating lunch with friends', 'practicing calligraphy',
-  'studying science', 'reading the news', 'making origami', 'playing with my cat'
-];
-
-const allTimePhrases = [
-  'for two days', 'for three days', 'for one week', 'for two weeks', 'for three weeks',
-  'for one month', 'for two months', 'for six months', 'for a year', 'for a long time',
-  'since yesterday', 'since last week', 'since last month', 'since last year', 'since April',
-  'since 2020', 'since I was ten', 'since elementary school', 'since this morning', 'since Monday'
-];
+// Edit these mode configs to change classroom content. Board spaces are prompts only, not model sentences.
+const grammarModes = {
+  jhs2: {
+    label: '2年生',
+    title: 'will / be going to',
+    reminder: 'Use: will / be going to',
+    boardPhrases: [
+      'visit my grandparents', 'study for a test', 'watch a movie', 'play soccer',
+      'go shopping', 'clean my room', 'make dinner', 'practice the piano',
+      'read a book', 'go to Tokyo', 'help my family', 'do my homework',
+      'play basketball', 'meet my friends', 'write a letter', 'buy a new notebook',
+      'cook curry', 'listen to music', 'take photos', 'ride my bike',
+      'walk my dog', 'play video games', 'draw a picture', 'sing a song',
+      'dance with friends', 'study English', 'study math', 'make a cake',
+      'visit a museum', 'go to the library', 'clean the classroom', 'wash the dishes',
+      'watch anime', 'read manga', 'practice baseball', 'play tennis',
+      'go swimming', 'go camping', 'travel by train', 'call my friend',
+      'send a message', 'use a computer', 'make a poster', 'prepare lunch',
+      'learn a new song', 'visit a shrine', 'go to the park', 'play cards',
+      'take care of my pet', 'study science'
+    ],
+    timePhrases: [
+      'tomorrow', 'tonight', 'next week', 'next month', 'next year',
+      'this weekend', 'after school', 'in two days', 'in three days', 'in two weeks',
+      'during summer vacation', 'on Sunday', 'on Saturday', 'this evening', 'next Monday',
+      'next Friday', 'during winter vacation', 'before dinner', 'after breakfast', 'in the morning'
+    ]
+  },
+  jhs3: {
+    label: '3年生',
+    title: 'have been ~ing',
+    reminder: 'Use: have been ~ing',
+    boardPhrases: [
+      'living in Kanagawa', 'making cakes', 'playing the guitar', 'studying English',
+      'watching movies', 'reading books', 'cooking dinner', 'using a computer',
+      'taking photos', 'playing baseball', 'drinking coffee', 'cleaning my room',
+      'learning Japanese', 'listening to music', 'walking to school', 'drawing pictures',
+      'working at a cafe', 'playing video games', 'practicing piano', 'writing stories',
+      'waiting for a friend', 'talking on the phone', 'exercising every day',
+      'visiting Yokohama', 'helping my family', 'playing basketball', 'studying math',
+      'reading manga', 'watching anime', 'making breakfast', 'walking my dog',
+      'playing soccer', 'taking the train', 'writing emails', 'cleaning the classroom',
+      'learning kanji', 'singing songs', 'dancing with friends', 'doing homework',
+      'shopping for groceries', 'riding my bike', 'playing tennis', 'painting pictures',
+      'using a tablet', 'making videos', 'taking care of plants', 'speaking English',
+      'playing cards', 'eating lunch with friends', 'practicing calligraphy',
+      'studying science', 'reading the news', 'making origami', 'playing with my cat'
+    ],
+    timePhrases: [
+      'for two days', 'for three days', 'for one week', 'for two weeks', 'for three weeks',
+      'for one month', 'for two months', 'for six months', 'for a year', 'for a long time',
+      'since yesterday', 'since last week', 'since last month', 'since last year', 'since April',
+      'since 2020', 'since I was ten', 'since elementary school', 'since this morning', 'since Monday'
+    ]
+  }
+};
 
 // The board is generated each game. START always has id 0; the other
 // spaces are arranged dynamically into one main loop plus one-way branches.
@@ -50,7 +82,8 @@ const BOARD_BOUNDS = {
 let connectorCurves = {};
 let mainPathIds = [];
 let branchEntryIds = [];
-let boardSpaces = generateBoardSpaces();
+let currentGrammarMode = null;
+let boardSpaces = [];
 
 const playerColors = ['#3578e5', '#ef476f', '#22a06b'];
 let players = [];
@@ -67,6 +100,10 @@ let ceremonyAnimating = false;
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+document.querySelectorAll('[data-mode]').forEach((button) => {
+  button.addEventListener('click', () => selectGrammarMode(button.dataset.mode));
+});
+$('backToModesButton').addEventListener('click', showModeScreen);
 $('startButton').addEventListener('click', startGame);
 $('rollButton').addEventListener('click', rollDie);
 $('nextTurnButton').addEventListener('click', nextTurn);
@@ -78,14 +115,53 @@ document.querySelectorAll('input[name="playerCount"]').forEach((input) => {
 });
 renderNameInputs();
 
+function getCurrentModeConfig() {
+  return grammarModes[currentGrammarMode] || grammarModes.jhs3;
+}
 
+function selectGrammarMode(mode) {
+  if (!grammarModes[mode]) return;
+  currentGrammarMode = mode;
+  updateSetupText();
+  $('modeScreen').classList.add('hidden');
+  $('startScreen').classList.remove('hidden');
+}
+
+function showModeScreen() {
+  currentGrammarMode = null;
+  resetGameState();
+  $('resultsSplash').classList.add('hidden');
+  $('gameScreen').classList.add('hidden');
+  $('startScreen').classList.add('hidden');
+  $('modeScreen').classList.remove('hidden');
+}
+
+function updateSetupText() {
+  const mode = getCurrentModeConfig();
+  $('setupTitle').textContent = mode.title;
+  $('setupReminder').textContent = `${mode.label} grammar game. ${mode.reminder}. Choose players and names, then start.`;
+}
+
+function resetGameState() {
+  players = [];
+  currentPlayerIndex = 0;
+  currentPrediction = null;
+  currentRoll = null;
+  currentTimePhrases = [];
+  controlsLocked = false;
+  activeBonusSpaceId = INITIAL_BONUS_SPACE_ID;
+  ceremonyBonuses = [];
+  ceremonyBonusIndex = 0;
+  ceremonyAnimating = false;
+  boardSpaces = [];
+}
 
 function generateBoardSpaces() {
   let lastWarnings = [];
   for (let attempt = 0; attempt < BOARD_GENERATION_ATTEMPTS; attempt += 1) {
     const branchPreference = attempt < BOARD_GENERATION_ATTEMPTS * 0.45 ? 2 : 1;
     const layout = generateBoardLayout(branchPreference);
-    const selectedPhrases = shuffle([...masterActivityPhrases]).slice(0, TOTAL_PROMPT_SPACES);
+    const selectedPhrases = shuffle([...getCurrentModeConfig().boardPhrases]).slice(0, TOTAL_PROMPT_SPACES);
     const generatedSpaces = layout.spaces.map((space) => ({
       ...space,
       phrase: space.id === 0 ? 'START' : selectedPhrases.pop(),
@@ -106,7 +182,7 @@ function generateBoardSpaces() {
   connectorCurves = fallback.connectorCurves;
   mainPathIds = fallback.mainPathIds;
   branchEntryIds = fallback.branchEntryIds;
-  const selectedPhrases = shuffle([...masterActivityPhrases]).slice(0, TOTAL_PROMPT_SPACES);
+  const selectedPhrases = shuffle([...getCurrentModeConfig().boardPhrases]).slice(0, TOTAL_PROMPT_SPACES);
   return fallback.spaces.map((space) => ({
     ...space,
     phrase: space.id === 0 ? 'START' : selectedPhrases.pop(),
@@ -592,6 +668,16 @@ function recordDiceStats(player, roll) {
 }
 
 function startGame() {
+  if (!currentGrammarMode) return showModeScreen();
+  players = [];
+  currentPlayerIndex = 0;
+  currentPrediction = null;
+  currentRoll = null;
+  currentTimePhrases = [];
+  controlsLocked = false;
+  ceremonyBonuses = [];
+  ceremonyBonusIndex = 0;
+  ceremonyAnimating = false;
   const count = Number(document.querySelector('input[name="playerCount"]:checked').value);
   const nameInputs = [...document.querySelectorAll('[data-player-name]')];
   players = Array.from({ length: count }, (_, i) => {
@@ -901,13 +987,7 @@ function showFinalResults() {
 }
 
 function startNewGame() {
-  players = [];
-  currentPlayerIndex = 0;
-  ceremonyBonuses = [];
-  ceremonyBonusIndex = 0;
-  $('resultsSplash').classList.add('hidden');
-  $('gameScreen').classList.add('hidden');
-  $('startScreen').classList.remove('hidden');
+  showModeScreen();
 }
 
 function beginTurn() {
@@ -924,7 +1004,7 @@ function beginTurn() {
 }
 
 function pickSixTimePhrases() {
-  return [...allTimePhrases].sort(() => Math.random() - 0.5).slice(0, 6);
+  return [...getCurrentModeConfig().timePhrases].sort(() => Math.random() - 0.5).slice(0, 6);
 }
 
 function renderAll() {
@@ -946,7 +1026,7 @@ function updateGameInfo(details = {}) {
   if (details.status === 'complete') status = 'Ready for the next turn.';
   $('gameInfo').innerHTML = `
     <p class="model-sentence">${practiceResult}</p>
-    <p class="info-status">${status}</p>`;
+    <p class="info-status">${getCurrentModeConfig().reminder} · ${status}</p>`;
 }
 
 function renderScoreboard() {
