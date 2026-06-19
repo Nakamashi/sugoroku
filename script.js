@@ -106,6 +106,8 @@ let demoRunning = false;
 let forcedRollQueue = [];
 let demoBonusOverride = null;
 let demoAdvanceResolver = null;
+let demoDragState = null;
+let demoCalloutOffset = { x: 0, y: 0 };
 
 document.querySelectorAll('[data-mode]').forEach((button) => {
   button.addEventListener('click', () => selectGrammarMode(button.dataset.mode));
@@ -119,6 +121,10 @@ $('endGameButton').addEventListener('click', endGame);
 $('newGameButton').addEventListener('click', startNewGame);
 $('bonusRevealButton').addEventListener('click', revealCurrentBonus);
 $('demoNextButton').addEventListener('click', advanceDemoStep);
+$('demoCallout').addEventListener('pointerdown', startDemoCalloutDrag);
+document.addEventListener('pointermove', moveDemoCalloutDrag);
+document.addEventListener('pointerup', endDemoCalloutDrag);
+document.addEventListener('pointercancel', endDemoCalloutDrag);
 document.querySelectorAll('input[name="playerCount"]').forEach((input) => {
   input.addEventListener('change', renderNameInputs);
 });
@@ -158,6 +164,7 @@ function resetGameState() {
   forcedRollQueue = [];
   demoBonusOverride = null;
   demoAdvanceResolver = null;
+  resetDemoCalloutPosition();
   players = [];
   currentPlayerIndex = 0;
   currentPrediction = null;
@@ -1558,6 +1565,49 @@ function advanceDemoStep() {
   resolve();
 }
 
+
+function applyDemoCalloutPosition() {
+  const callout = $('demoCallout');
+  callout.style.setProperty('--demo-x', `${demoCalloutOffset.x}px`);
+  callout.style.setProperty('--demo-y', `${demoCalloutOffset.y}px`);
+}
+
+function resetDemoCalloutPosition() {
+  demoCalloutOffset = { x: 0, y: 0 };
+  demoDragState = null;
+  $('demoCallout')?.classList.remove('dragging');
+  if ($('demoCallout')) applyDemoCalloutPosition();
+}
+
+function startDemoCalloutDrag(event) {
+  if (event.target.closest('button')) return;
+  demoDragState = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: demoCalloutOffset.x,
+    originY: demoCalloutOffset.y
+  };
+  $('demoCallout').classList.add('dragging');
+  $('demoCallout').setPointerCapture?.(event.pointerId);
+}
+
+function moveDemoCalloutDrag(event) {
+  if (!demoDragState || event.pointerId !== demoDragState.pointerId) return;
+  demoCalloutOffset = {
+    x: demoDragState.originX + event.clientX - demoDragState.startX,
+    y: demoDragState.originY + event.clientY - demoDragState.startY
+  };
+  applyDemoCalloutPosition();
+}
+
+function endDemoCalloutDrag(event) {
+  if (!demoDragState || event.pointerId !== demoDragState.pointerId) return;
+  $('demoCallout').releasePointerCapture?.(event.pointerId);
+  $('demoCallout').classList.remove('dragging');
+  demoDragState = null;
+}
+
 async function runSampleTurnDemo() {
   demoMode = true;
   demoRunning = true;
@@ -1592,36 +1642,36 @@ async function runSampleTurnDemo() {
   drawBoard();
   beginTurn();
 
-  setDemoCallout('#predictionButtons', '1) Predict the dice roll', 'Press Next Step to select 3. The roll will match so students see the prediction bonus.');
+  setDemoCallout('#predictionButtons', '1) Predict the dice roll', 'Teacher Demo makes a bold prediction: the magic number is 3.');
   await waitForDemoAdvance();
   selectPrediction(3);
 
-  setDemoCallout('#rollButton', '2) Roll the dice', 'Press Next Step to roll. The dice chooses both movement and the time phrase.');
+  setDemoCallout('#rollButton', '2) Roll the dice', 'The die becomes the adventure engine: it chooses the time phrase and moves the token.');
   await waitForDemoAdvance();
   await rollDie();
 
-  setDemoCallout('#space-3', '3) Land on the star', 'Teacher Demo got +1 for landing and +3 for the star space.');
+  setDemoCallout('#space-3', '3) Land on the star', 'A perfect opening! Teacher Demo lands on the star and the score jumps ahead.');
   await waitForDemoAdvance();
   nextTurn();
 
-  setDemoCallout('#space-0', '4) Pass START', 'Press Next Step to give Comeback Kid a turn that passes START for bonus points.');
+  setDemoCallout('#space-0', '4) Pass START', 'Comeback Kid is waiting near START. One lucky trip can close the gap.');
   await waitForDemoAdvance();
   selectPrediction(3);
   await rollDie();
 
-  setDemoCallout('#endGameButton', '5) End the game', 'Press Next Step to open results. The mystery bonus will create a comeback win.');
+  setDemoCallout('#endGameButton', '5) End the game', 'The short game is ending, but bonus time can still change the whole story.');
   await waitForDemoAdvance();
   endGame();
 
-  setDemoCallout('#bonusRevealButton', '6) Reveal the comeback bonus', 'Press Next Step to award the mystery bonus to Comeback Kid.');
+  setDemoCallout('#bonusRevealButton', '6) Reveal the comeback bonus', 'A secret award appears, and Comeback Kid has a chance to steal the show.');
   await waitForDemoAdvance();
   await revealCurrentBonus();
 
-  setDemoCallout('#bonusRevealButton', '7) Show final results', 'Press Next Step to see the comeback win, then return to the main screen.');
+  setDemoCallout('#bonusRevealButton', '7) Show final results', 'Now the scoreboard reveals whether the comeback story is complete.');
   await waitForDemoAdvance();
   await revealCurrentBonus();
 
-  setDemoCallout('#newGameButton', '8) Back to the main screen', 'Press Finish Demo when you are ready to choose a normal game.', 'Finish Demo');
+  setDemoCallout('#newGameButton', '8) Back to the main screen', 'Demo complete. Choose a grammar game when you are ready for the class match.', 'Finish Demo');
   await waitForDemoAdvance();
   hideDemoCallout();
   startNewGame();
