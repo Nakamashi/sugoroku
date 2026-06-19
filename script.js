@@ -99,10 +99,18 @@ let ceremonyAnimating = false;
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const DEMO_KEY_SEQUENCE = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a', 'Enter'];
+let demoKeyProgress = 0;
+let demoMode = false;
+let demoRunning = false;
+let forcedRollQueue = [];
+let demoBonusOverride = null;
+let demoAdvanceResolver = null;
 
 document.querySelectorAll('[data-mode]').forEach((button) => {
   button.addEventListener('click', () => selectGrammarMode(button.dataset.mode));
 });
+document.addEventListener('keydown', handleDemoKeySequence);
 $('backToModesButton').addEventListener('click', showModeScreen);
 $('startButton').addEventListener('click', startGame);
 $('rollButton').addEventListener('click', rollDie);
@@ -110,6 +118,7 @@ $('nextTurnButton').addEventListener('click', nextTurn);
 $('endGameButton').addEventListener('click', endGame);
 $('newGameButton').addEventListener('click', startNewGame);
 $('bonusRevealButton').addEventListener('click', revealCurrentBonus);
+$('demoNextButton').addEventListener('click', advanceDemoStep);
 document.querySelectorAll('input[name="playerCount"]').forEach((input) => {
   input.addEventListener('change', renderNameInputs);
 });
@@ -143,6 +152,12 @@ function updateSetupText() {
 }
 
 function resetGameState() {
+  hideDemoCallout();
+  demoMode = false;
+  demoRunning = false;
+  forcedRollQueue = [];
+  demoBonusOverride = null;
+  demoAdvanceResolver = null;
   players = [];
   currentPlayerIndex = 0;
   currentPrediction = null;
@@ -702,7 +717,7 @@ function startGame() {
 }
 
 function endGame() {
-  if (!confirm('End the game and show the results?')) return;
+  if (!demoMode && !confirm('End the game and show the results?')) return;
   startBonusCeremony();
 }
 
@@ -811,6 +826,7 @@ function selectDiverseBonusSet(candidates, desiredCount) {
 }
 
 function selectEndGameBonuses() {
+  if (demoBonusOverride) return demoBonusOverride;
   const targetCount = getEndGameBonusCount();
   const candidates = calculateBonusCandidates().map(getCandidateBonusAward);
   return selectDiverseBonusSet(candidates, Math.min(targetCount, candidates.length));
@@ -994,7 +1010,7 @@ function beginTurn() {
   currentPrediction = null;
   currentRoll = null;
   controlsLocked = false;
-  currentTimePhrases = pickSixTimePhrases();
+  currentTimePhrases = demoMode ? ['tomorrow', 'tonight', 'next week', 'next month', 'next year', 'this weekend'] : pickSixTimePhrases();
   $('dice').textContent = '?';
   clearBranchOptions();
   $('nextTurnButton').classList.add('hidden');
@@ -1073,7 +1089,7 @@ async function rollDie() {
     $('dice').textContent = Math.ceil(Math.random() * 6);
     await sleep(110);
   }
-  currentRoll = getAssistedDieRoll(players[currentPlayerIndex]);
+  currentRoll = forcedRollQueue.length ? forcedRollQueue.shift() : getAssistedDieRoll(players[currentPlayerIndex]);
   recordDiceStats(players[currentPlayerIndex], currentRoll);
   $('dice').classList.remove('rolling');
   $('dice').textContent = currentRoll;
@@ -1436,4 +1452,177 @@ function showFloating(message) {
 function nextTurn() {
   currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
   beginTurn();
+}
+
+function handleDemoKeySequence(event) {
+  if (!$('modeScreen') || $('modeScreen').classList.contains('hidden') || demoRunning) return;
+  const expected = DEMO_KEY_SEQUENCE[demoKeyProgress];
+  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+  const normalizedExpected = expected.length === 1 ? expected.toLowerCase() : expected;
+  if (key === normalizedExpected) {
+    demoKeyProgress += 1;
+    if (demoKeyProgress === DEMO_KEY_SEQUENCE.length) {
+      demoKeyProgress = 0;
+      event.preventDefault();
+      runSampleTurnDemo();
+    }
+    return;
+  }
+  demoKeyProgress = key === DEMO_KEY_SEQUENCE[0] ? 1 : 0;
+}
+
+function createDemoBoardSpaces() {
+  mainPathIds = Array.from({ length: TOTAL_BOARD_SPACES }, (_, id) => id);
+  branchEntryIds = [];
+  connectorCurves = {};
+  const phrases = [
+    'START', 'choose a dice number', 'roll the dice', 'collect the star bonus',
+    'say the sentence', 'move your token', 'watch the score', 'keep going',
+    'practice English', 'cheer your friends', 'read the time phrase', 'take another turn',
+    'pass START', 'try a comeback', 'win a mystery bonus', 'play again',
+    'get ready', 'almost home', 'pass START now'
+  ];
+  return Array.from({ length: TOTAL_BOARD_SPACES }, (_, id) => {
+    const angle = 210 - (id * 360 / TOTAL_BOARD_SPACES);
+    const radians = angle * Math.PI / 180;
+    return {
+      id,
+      x: 50 + 39 * Math.cos(radians),
+      y: 50 - 35 * Math.sin(radians),
+      phrase: phrases[id],
+      next: [(id + 1) % TOTAL_BOARD_SPACES]
+    };
+  });
+}
+
+function createDemoPlayers() {
+  return [
+    {
+      name: 'Teacher Demo',
+      score: 0,
+      position: 0,
+      color: playerColors[0],
+      token: 'P1',
+      stats: createInitialPlayerStats(),
+      baseScoreBeforeBonuses: 0,
+      endGameBonusPoints: 0
+    },
+    {
+      name: 'Comeback Kid',
+      score: 0,
+      position: 16,
+      color: playerColors[1],
+      token: 'P2',
+      stats: createInitialPlayerStats(),
+      baseScoreBeforeBonuses: 0,
+      endGameBonusPoints: 0
+    }
+  ];
+}
+
+function setDemoCallout(target, label, subtext = '', buttonText = 'Next Step') {
+  const overlay = $('demoOverlay');
+  const targetNode = typeof target === 'string' ? document.querySelector(target) : target;
+  if (!overlay || !targetNode) return;
+  overlay.classList.remove('hidden');
+  document.querySelectorAll('.demo-highlight').forEach((node) => node.classList.remove('demo-highlight'));
+  targetNode.classList.add('demo-highlight');
+  $('demoLabel').textContent = label;
+  $('demoSubtext').textContent = subtext;
+  $('demoNextButton').textContent = buttonText;
+  $('demoNextButton').disabled = false;
+}
+
+function hideDemoCallout() {
+  $('demoOverlay')?.classList.add('hidden');
+  $('demoNextButton').disabled = true;
+  document.querySelectorAll('.demo-highlight').forEach((node) => node.classList.remove('demo-highlight'));
+  if (demoAdvanceResolver) {
+    demoAdvanceResolver();
+    demoAdvanceResolver = null;
+  }
+}
+
+function waitForDemoAdvance() {
+  $('demoNextButton').disabled = false;
+  return new Promise((resolve) => {
+    demoAdvanceResolver = resolve;
+  });
+}
+
+function advanceDemoStep() {
+  if (!demoAdvanceResolver) return;
+  const resolve = demoAdvanceResolver;
+  demoAdvanceResolver = null;
+  $('demoNextButton').disabled = true;
+  resolve();
+}
+
+async function runSampleTurnDemo() {
+  demoMode = true;
+  demoRunning = true;
+  currentGrammarMode = 'jhs2';
+  players = createDemoPlayers();
+  currentPlayerIndex = 0;
+  currentPrediction = null;
+  currentRoll = null;
+  controlsLocked = false;
+  ceremonyBonuses = [];
+  ceremonyBonusIndex = 0;
+  ceremonyAnimating = false;
+  activeBonusSpaceId = 3;
+  forcedRollQueue = [3, 3];
+  boardSpaces = createDemoBoardSpaces();
+  demoBonusOverride = [{
+    id: 'demo-comeback',
+    title: 'Comeback Champion',
+    subtitle: '大逆転チャンピオン',
+    points: 7,
+    type: 'high',
+    explanation: 'Best comeback spirit',
+    unit: 'demo',
+    value: 1,
+    winners: [players[1]],
+    allTied: false
+  }];
+  $('modeScreen').classList.add('hidden');
+  $('startScreen').classList.add('hidden');
+  $('resultsSplash').classList.add('hidden');
+  $('gameScreen').classList.remove('hidden');
+  drawBoard();
+  beginTurn();
+
+  setDemoCallout('#predictionButtons', '1) Predict the dice roll', 'Press Next Step to select 3. The roll will match so students see the prediction bonus.');
+  await waitForDemoAdvance();
+  selectPrediction(3);
+
+  setDemoCallout('#rollButton', '2) Roll the dice', 'Press Next Step to roll. The dice chooses both movement and the time phrase.');
+  await waitForDemoAdvance();
+  await rollDie();
+
+  setDemoCallout('#space-3', '3) Land on the star', 'Teacher Demo got +1 for landing and +3 for the star space.');
+  await waitForDemoAdvance();
+  nextTurn();
+
+  setDemoCallout('#space-0', '4) Pass START', 'Press Next Step to give Comeback Kid a turn that passes START for bonus points.');
+  await waitForDemoAdvance();
+  selectPrediction(3);
+  await rollDie();
+
+  setDemoCallout('#endGameButton', '5) End the game', 'Press Next Step to open results. The mystery bonus will create a comeback win.');
+  await waitForDemoAdvance();
+  endGame();
+
+  setDemoCallout('#bonusRevealButton', '6) Reveal the comeback bonus', 'Press Next Step to award the mystery bonus to Comeback Kid.');
+  await waitForDemoAdvance();
+  await revealCurrentBonus();
+
+  setDemoCallout('#bonusRevealButton', '7) Show final results', 'Press Next Step to see the comeback win, then return to the main screen.');
+  await waitForDemoAdvance();
+  await revealCurrentBonus();
+
+  setDemoCallout('#newGameButton', '8) Back to the main screen', 'Press Finish Demo when you are ready to choose a normal game.', 'Finish Demo');
+  await waitForDemoAdvance();
+  hideDemoCallout();
+  startNewGame();
 }
