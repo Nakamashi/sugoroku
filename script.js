@@ -105,6 +105,7 @@ let demoMode = false;
 let demoRunning = false;
 let forcedRollQueue = [];
 let demoBonusOverride = null;
+let demoAdvanceResolver = null;
 
 document.querySelectorAll('[data-mode]').forEach((button) => {
   button.addEventListener('click', () => selectGrammarMode(button.dataset.mode));
@@ -117,6 +118,7 @@ $('nextTurnButton').addEventListener('click', nextTurn);
 $('endGameButton').addEventListener('click', endGame);
 $('newGameButton').addEventListener('click', startNewGame);
 $('bonusRevealButton').addEventListener('click', revealCurrentBonus);
+$('demoNextButton').addEventListener('click', advanceDemoStep);
 document.querySelectorAll('input[name="playerCount"]').forEach((input) => {
   input.addEventListener('change', renderNameInputs);
 });
@@ -155,6 +157,7 @@ function resetGameState() {
   demoRunning = false;
   forcedRollQueue = [];
   demoBonusOverride = null;
+  demoAdvanceResolver = null;
   players = [];
   currentPlayerIndex = 0;
   currentPrediction = null;
@@ -1517,27 +1520,42 @@ function createDemoPlayers() {
   ];
 }
 
-function setDemoCallout(target, label, subtext = '') {
+function setDemoCallout(target, label, subtext = '', buttonText = 'Next Step') {
   const overlay = $('demoOverlay');
-  const callout = $('demoCallout');
   const targetNode = typeof target === 'string' ? document.querySelector(target) : target;
-  if (!overlay || !callout || !targetNode) return;
+  if (!overlay || !targetNode) return;
   overlay.classList.remove('hidden');
   document.querySelectorAll('.demo-highlight').forEach((node) => node.classList.remove('demo-highlight'));
   targetNode.classList.add('demo-highlight');
   $('demoLabel').textContent = label;
   $('demoSubtext').textContent = subtext;
-  const boardRect = $('board').getBoundingClientRect();
-  const targetRect = targetNode.getBoundingClientRect();
-  const left = Math.min(boardRect.width - 260, Math.max(16, targetRect.left - boardRect.left - 210));
-  const top = Math.min(boardRect.height - 100, Math.max(16, targetRect.top - boardRect.top - 18));
-  callout.style.left = `${left}px`;
-  callout.style.top = `${top}px`;
+  $('demoNextButton').textContent = buttonText;
+  $('demoNextButton').disabled = false;
 }
 
 function hideDemoCallout() {
   $('demoOverlay')?.classList.add('hidden');
+  $('demoNextButton').disabled = true;
   document.querySelectorAll('.demo-highlight').forEach((node) => node.classList.remove('demo-highlight'));
+  if (demoAdvanceResolver) {
+    demoAdvanceResolver();
+    demoAdvanceResolver = null;
+  }
+}
+
+function waitForDemoAdvance() {
+  $('demoNextButton').disabled = false;
+  return new Promise((resolve) => {
+    demoAdvanceResolver = resolve;
+  });
+}
+
+function advanceDemoStep() {
+  if (!demoAdvanceResolver) return;
+  const resolve = demoAdvanceResolver;
+  demoAdvanceResolver = null;
+  $('demoNextButton').disabled = true;
+  resolve();
 }
 
 async function runSampleTurnDemo() {
@@ -1574,32 +1592,37 @@ async function runSampleTurnDemo() {
   drawBoard();
   beginTurn();
 
-  setDemoCallout('#predictionButtons', '1) Predict the dice roll', 'The demo chooses 3, then the roll will match.');
-  await sleep(1200);
+  setDemoCallout('#predictionButtons', '1) Predict the dice roll', 'Press Next Step to select 3. The roll will match so students see the prediction bonus.');
+  await waitForDemoAdvance();
   selectPrediction(3);
-  await sleep(650);
-  setDemoCallout('#rollButton', '2) Roll the dice', 'A correct prediction gives +1 point.');
-  await sleep(900);
+
+  setDemoCallout('#rollButton', '2) Roll the dice', 'Press Next Step to roll. The dice chooses both movement and the time phrase.');
+  await waitForDemoAdvance();
   await rollDie();
-  setDemoCallout('#space-3', '3) Land on the star', 'The star space gives a big bonus.');
-  await sleep(1700);
+
+  setDemoCallout('#space-3', '3) Land on the star', 'Teacher Demo got +1 for landing and +3 for the star space.');
+  await waitForDemoAdvance();
   nextTurn();
 
-  setDemoCallout('#space-0', '4) Pass START', 'Comeback Kid is close to START and will pass it.');
-  await sleep(1000);
+  setDemoCallout('#space-0', '4) Pass START', 'Press Next Step to give Comeback Kid a turn that passes START for bonus points.');
+  await waitForDemoAdvance();
   selectPrediction(3);
-  await sleep(500);
   await rollDie();
-  await sleep(900);
 
-  setDemoCallout('#endGameButton', '5) End the game', 'The mystery bonus can create a comeback win.');
-  await sleep(1200);
+  setDemoCallout('#endGameButton', '5) End the game', 'Press Next Step to open results. The mystery bonus will create a comeback win.');
+  await waitForDemoAdvance();
   endGame();
+
+  setDemoCallout('#bonusRevealButton', '6) Reveal the comeback bonus', 'Press Next Step to award the mystery bonus to Comeback Kid.');
+  await waitForDemoAdvance();
+  await revealCurrentBonus();
+
+  setDemoCallout('#bonusRevealButton', '7) Show final results', 'Press Next Step to see the comeback win, then return to the main screen.');
+  await waitForDemoAdvance();
+  await revealCurrentBonus();
+
+  setDemoCallout('#newGameButton', '8) Back to the main screen', 'Press Finish Demo when you are ready to choose a normal game.', 'Finish Demo');
+  await waitForDemoAdvance();
   hideDemoCallout();
-  await sleep(900);
-  await revealCurrentBonus();
-  await sleep(1200);
-  await revealCurrentBonus();
-  await sleep(2500);
   startNewGame();
 }
