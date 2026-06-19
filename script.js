@@ -99,10 +99,17 @@ let ceremonyAnimating = false;
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const DEMO_KEY_SEQUENCE = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a', 'Enter'];
+let demoKeyProgress = 0;
+let demoMode = false;
+let demoRunning = false;
+let forcedRollQueue = [];
+let demoBonusOverride = null;
 
 document.querySelectorAll('[data-mode]').forEach((button) => {
   button.addEventListener('click', () => selectGrammarMode(button.dataset.mode));
 });
+document.addEventListener('keydown', handleDemoKeySequence);
 $('backToModesButton').addEventListener('click', showModeScreen);
 $('startButton').addEventListener('click', startGame);
 $('rollButton').addEventListener('click', rollDie);
@@ -143,6 +150,11 @@ function updateSetupText() {
 }
 
 function resetGameState() {
+  hideDemoCallout();
+  demoMode = false;
+  demoRunning = false;
+  forcedRollQueue = [];
+  demoBonusOverride = null;
   players = [];
   currentPlayerIndex = 0;
   currentPrediction = null;
@@ -702,7 +714,7 @@ function startGame() {
 }
 
 function endGame() {
-  if (!confirm('End the game and show the results?')) return;
+  if (!demoMode && !confirm('End the game and show the results?')) return;
   startBonusCeremony();
 }
 
@@ -811,6 +823,7 @@ function selectDiverseBonusSet(candidates, desiredCount) {
 }
 
 function selectEndGameBonuses() {
+  if (demoBonusOverride) return demoBonusOverride;
   const targetCount = getEndGameBonusCount();
   const candidates = calculateBonusCandidates().map(getCandidateBonusAward);
   return selectDiverseBonusSet(candidates, Math.min(targetCount, candidates.length));
@@ -994,7 +1007,7 @@ function beginTurn() {
   currentPrediction = null;
   currentRoll = null;
   controlsLocked = false;
-  currentTimePhrases = pickSixTimePhrases();
+  currentTimePhrases = demoMode ? ['tomorrow', 'tonight', 'next week', 'next month', 'next year', 'this weekend'] : pickSixTimePhrases();
   $('dice').textContent = '?';
   clearBranchOptions();
   $('nextTurnButton').classList.add('hidden');
@@ -1073,7 +1086,7 @@ async function rollDie() {
     $('dice').textContent = Math.ceil(Math.random() * 6);
     await sleep(110);
   }
-  currentRoll = getAssistedDieRoll(players[currentPlayerIndex]);
+  currentRoll = forcedRollQueue.length ? forcedRollQueue.shift() : getAssistedDieRoll(players[currentPlayerIndex]);
   recordDiceStats(players[currentPlayerIndex], currentRoll);
   $('dice').classList.remove('rolling');
   $('dice').textContent = currentRoll;
@@ -1436,4 +1449,157 @@ function showFloating(message) {
 function nextTurn() {
   currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
   beginTurn();
+}
+
+function handleDemoKeySequence(event) {
+  if (!$('modeScreen') || $('modeScreen').classList.contains('hidden') || demoRunning) return;
+  const expected = DEMO_KEY_SEQUENCE[demoKeyProgress];
+  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+  const normalizedExpected = expected.length === 1 ? expected.toLowerCase() : expected;
+  if (key === normalizedExpected) {
+    demoKeyProgress += 1;
+    if (demoKeyProgress === DEMO_KEY_SEQUENCE.length) {
+      demoKeyProgress = 0;
+      event.preventDefault();
+      runSampleTurnDemo();
+    }
+    return;
+  }
+  demoKeyProgress = key === DEMO_KEY_SEQUENCE[0] ? 1 : 0;
+}
+
+function createDemoBoardSpaces() {
+  mainPathIds = Array.from({ length: TOTAL_BOARD_SPACES }, (_, id) => id);
+  branchEntryIds = [];
+  connectorCurves = {};
+  const phrases = [
+    'START', 'choose a dice number', 'roll the dice', 'collect the star bonus',
+    'say the sentence', 'move your token', 'watch the score', 'keep going',
+    'practice English', 'cheer your friends', 'read the time phrase', 'take another turn',
+    'pass START', 'try a comeback', 'win a mystery bonus', 'play again',
+    'get ready', 'almost home', 'pass START now'
+  ];
+  return Array.from({ length: TOTAL_BOARD_SPACES }, (_, id) => {
+    const angle = 210 - (id * 360 / TOTAL_BOARD_SPACES);
+    const radians = angle * Math.PI / 180;
+    return {
+      id,
+      x: 50 + 39 * Math.cos(radians),
+      y: 50 - 35 * Math.sin(radians),
+      phrase: phrases[id],
+      next: [(id + 1) % TOTAL_BOARD_SPACES]
+    };
+  });
+}
+
+function createDemoPlayers() {
+  return [
+    {
+      name: 'Teacher Demo',
+      score: 0,
+      position: 0,
+      color: playerColors[0],
+      token: 'P1',
+      stats: createInitialPlayerStats(),
+      baseScoreBeforeBonuses: 0,
+      endGameBonusPoints: 0
+    },
+    {
+      name: 'Comeback Kid',
+      score: 0,
+      position: 16,
+      color: playerColors[1],
+      token: 'P2',
+      stats: createInitialPlayerStats(),
+      baseScoreBeforeBonuses: 0,
+      endGameBonusPoints: 0
+    }
+  ];
+}
+
+function setDemoCallout(target, label, subtext = '') {
+  const overlay = $('demoOverlay');
+  const callout = $('demoCallout');
+  const targetNode = typeof target === 'string' ? document.querySelector(target) : target;
+  if (!overlay || !callout || !targetNode) return;
+  overlay.classList.remove('hidden');
+  document.querySelectorAll('.demo-highlight').forEach((node) => node.classList.remove('demo-highlight'));
+  targetNode.classList.add('demo-highlight');
+  $('demoLabel').textContent = label;
+  $('demoSubtext').textContent = subtext;
+  const boardRect = $('board').getBoundingClientRect();
+  const targetRect = targetNode.getBoundingClientRect();
+  const left = Math.min(boardRect.width - 260, Math.max(16, targetRect.left - boardRect.left - 210));
+  const top = Math.min(boardRect.height - 100, Math.max(16, targetRect.top - boardRect.top - 18));
+  callout.style.left = `${left}px`;
+  callout.style.top = `${top}px`;
+}
+
+function hideDemoCallout() {
+  $('demoOverlay')?.classList.add('hidden');
+  document.querySelectorAll('.demo-highlight').forEach((node) => node.classList.remove('demo-highlight'));
+}
+
+async function runSampleTurnDemo() {
+  demoMode = true;
+  demoRunning = true;
+  currentGrammarMode = 'jhs2';
+  players = createDemoPlayers();
+  currentPlayerIndex = 0;
+  currentPrediction = null;
+  currentRoll = null;
+  controlsLocked = false;
+  ceremonyBonuses = [];
+  ceremonyBonusIndex = 0;
+  ceremonyAnimating = false;
+  activeBonusSpaceId = 3;
+  forcedRollQueue = [3, 3];
+  boardSpaces = createDemoBoardSpaces();
+  demoBonusOverride = [{
+    id: 'demo-comeback',
+    title: 'Comeback Champion',
+    subtitle: '大逆転チャンピオン',
+    points: 7,
+    type: 'high',
+    explanation: 'Best comeback spirit',
+    unit: 'demo',
+    value: 1,
+    winners: [players[1]],
+    allTied: false
+  }];
+  $('modeScreen').classList.add('hidden');
+  $('startScreen').classList.add('hidden');
+  $('resultsSplash').classList.add('hidden');
+  $('gameScreen').classList.remove('hidden');
+  drawBoard();
+  beginTurn();
+
+  setDemoCallout('#predictionButtons', '1) Predict the dice roll', 'The demo chooses 3, then the roll will match.');
+  await sleep(1200);
+  selectPrediction(3);
+  await sleep(650);
+  setDemoCallout('#rollButton', '2) Roll the dice', 'A correct prediction gives +1 point.');
+  await sleep(900);
+  await rollDie();
+  setDemoCallout('#space-3', '3) Land on the star', 'The star space gives a big bonus.');
+  await sleep(1700);
+  nextTurn();
+
+  setDemoCallout('#space-0', '4) Pass START', 'Comeback Kid is close to START and will pass it.');
+  await sleep(1000);
+  selectPrediction(3);
+  await sleep(500);
+  await rollDie();
+  await sleep(900);
+
+  setDemoCallout('#endGameButton', '5) End the game', 'The mystery bonus can create a comeback win.');
+  await sleep(1200);
+  endGame();
+  hideDemoCallout();
+  await sleep(900);
+  await revealCurrentBonus();
+  await sleep(1200);
+  await revealCurrentBonus();
+  await sleep(2500);
+  startNewGame();
 }
